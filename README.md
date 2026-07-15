@@ -1,6 +1,6 @@
 # The Painter's Wheel
 
-Interactive colour theory for oil painters. Four lesson paintings (contrast, value, hue, chroma) with pin-based colour sampling, approximate Munsell notation, oil paint matching across five manufacturers (Winsor & Newton, Michael Harding, Old Holland, Gamblin, Rembrandt), two-paint mixing recommendations, automatic palette extraction for uploaded images, and a dynamic RYB colour wheel with a live mixing lab (hue nudging along the wheel, chroma cancellation toward the complement, tint and shade with a black-versus-complement comparison). Pins and the saved palette persist per browser via localStorage, and the sampling canvas supports touch (drag to inspect, release to pin). A dedicated Zorn Palette tab covers the four-tube portrait method.
+Interactive colour theory for oil painters. Four lesson paintings (contrast, value, hue, chroma) with pin-based colour sampling, Munsell notation interpolated from the real renotation dataset, oil paint matching across five manufacturers (Winsor & Newton, Michael Harding, Old Holland, Gamblin, Rembrandt), two-paint mixing recommendations, automatic palette extraction for uploaded images, and a dynamic RYB colour wheel with a live mixing lab (hue nudging along the wheel, chroma cancellation toward the complement, tint and shade with a black-versus-complement comparison). Pins and the saved palette persist per browser via localStorage, and the sampling canvas supports touch (drag to inspect, release to pin). A dedicated Zorn Palette tab covers the four-tube portrait method.
 
 ## Stack
 
@@ -19,6 +19,7 @@ Ports are pinned to 5280/5281 deliberately to avoid colliding with other local V
 
 ## Structure
 
+- `src/munsellData.js` · the 2,734-point Munsell renotation dataset as D65 CIELAB
 - `src/App.jsx` — the whole application for now (Phase 1); will be split into components in Phase 2
 - `public/lessons/` — the four lesson paintings (`contrast.jpg` is Caravaggio's The Taking of Christ, public domain, National Gallery of Ireland via Wikimedia Commons; the other three are the site author's own works)
 

@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { MUNSELL_POINTS } from "./munsellData.js";
 
 /* ================================================================
-   THE PAINTER'S WHEEL: Phase 1.9
+   THE PAINTER'S WHEEL: Phase 2.0
    Lessons gateway (Contrast · Value · Hue · Chroma) with pin-based
    study, colour theory guidance, paint matching and mixing advice
    ================================================================ */
@@ -79,37 +80,169 @@ function deltaE2000([L1, a1, b1], [L2, a2, b2]) {
     Rt * (dCp / Sc) * (dHp / Sh)
   );
 }
-/* Rough Munsell notation from Lab (nearest-anchor interpolation on the
-   hue circle; value = L divided by 10, chroma ≈ Cab divided by 5).
-   Studio guidance only; Phase 2 replaces this with the renotation lookup. */
-const MUNSELL_ANCHORS = [
-  ["5R", 27], ["5YR", 57], ["5Y", 90], ["5GY", 125], ["5G", 162],
-  ["5BG", 200], ["5B", 240], ["5PB", 285], ["5P", 320], ["5RP", 352],
-];
-const FAMILIES = ["R", "YR", "Y", "GY", "G", "BG", "B", "PB", "P", "RP"];
+/* ---------------- Munsell renotation lookup ----------------------
+   labToMunsell interpolates the real renotation dataset (2,734 points,
+   see munsellData): value from the ASTM D1535 polynomial (inverted
+   numerically), hue and chroma from inverse-distance weighting of the
+   six nearest neighbours in CIELAB, with hue averaged circularly.  */
+const MUNSELL_HUE_NAMES = (() => {
+  const steps = ["2.5", "5", "7.5", "10"];
+  const out = [];
+  for (const f of FAMILIES) for (const s of steps) out.push(s + f);
+  return out;
+})();
+const MUNSELL_N = MUNSELL_POINTS.length / 6;
+function labToY(L) {
+  const fy = (L + 16) / 116;
+  const d = 6 / 29;
+  return 100 * (fy > d ? fy * fy * fy : 3 * d * d * (fy - 4 / 29));
+}
+function munsellValueFromY(Y) {
+  let lo = 0, hi = 10;
+  for (let i = 0; i < 48; i++) {
+    const V = (lo + hi) / 2;
+    const y = V * (1.1914 + V * (-0.22533 + V * (0.23352 + V * (-0.020484 + V * 0.00081939))));
+    if (y < Y) lo = V; else hi = V;
+  }
+  return (lo + hi) / 2;
+}
 function labToMunsell([L, a, b]) {
-  const C = Math.hypot(a, b);
-  const value = Math.round((L / 10) * 2) / 2;
-  if (C < 4) return `N ${value}/`;
-  let hab = Math.atan2(b, a) * (180 / Math.PI);
-  if (hab < 0) hab += 360;
-  const pts = MUNSELL_ANCHORS.map(([lab2, h], i) => ({ h, p: 5 + i * 10 }));
-  pts.push({ h: pts[0].h + 360, p: 105 });
-  let p = 5;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const A = pts[i], B2 = pts[i + 1];
-    const hh = hab < pts[0].h ? hab + 360 : hab;
-    if (hh >= A.h && hh <= B2.h) {
-      p = A.p + ((hh - A.h) / (B2.h - A.h)) * (B2.p - A.p);
-      break;
+  const Cab = Math.hypot(a, b);
+  const V = Math.max(0, munsellValueFromY(labToY(L)));
+  if (Cab < 4) return `N ${V.toFixed(1)}/`;
+  const best = [];
+  for (let i = 0; i < MUNSELL_N; i++) {
+    const o = i * 6;
+    const dL = L - MUNSELL_POINTS[o + 3] / 10;
+    const da = a - MUNSELL_POINTS[o + 4] / 10;
+    const db = b - MUNSELL_POINTS[o + 5] / 10;
+    const d2 = dL * dL + da * da + db * db;
+    if (best.length < 6) {
+      best.push({ d2, o });
+      best.sort((x, y) => x.d2 - y.d2);
+    } else if (d2 < best[5].d2) {
+      best[5] = { d2, o };
+      best.sort((x, y) => x.d2 - y.d2);
     }
   }
-  p = ((p % 100) + 100) % 100;
-  const fam = FAMILIES[Math.floor(p / 10)];
-  const step = Math.round((p % 10) * 2) / 2 || 10;
-  const chroma = Math.max(1, Math.round(C / 5));
-  return `${step}${fam} ${value}/${chroma}`;
+  let sw = 0, sx = 0, sy = 0, sc = 0;
+  for (const { d2, o } of best) {
+    const w = 1 / (d2 + 1e-6);
+    const th = (MUNSELL_POINTS[o] * 9 * Math.PI) / 180;
+    sx += w * Math.cos(th);
+    sy += w * Math.sin(th);
+    sc += w * (MUNSELL_POINTS[o + 2] / 10);
+    sw += w;
+  }
+  const chroma = sc / sw;
+  let ang = Math.atan2(sy, sx) * (180 / Math.PI);
+  if (ang < 0) ang += 360;
+  let units = ((ang / 3.6 + 2.5) % 100 + 100) % 100;
+  let famIdx = Math.floor(units / 10) % 10;
+  let within = Math.round((units - famIdx * 10) * 2) / 2;
+  if (within < 0.25) { within = 10; famIdx = (famIdx + 9) % 10; }
+  return `${within}${FAMILIES[famIdx]} ${V.toFixed(1)}/${chroma.toFixed(1)}`;
 }
+function labToRgbHex(L, a, b) {
+  const fy = (L + 16) / 116, fx = fy + a / 500, fz = fy - b / 200;
+  const d = 6 / 29;
+  const inv = (t) => (t > d ? t * t * t : 3 * d * d * (t - 4 / 29));
+  const X = 0.95047 * inv(fx), Y = inv(fy), Z = 1.08883 * inv(fz);
+  let r = 3.2404542 * X - 1.5371385 * Y - 0.4985314 * Z;
+  let g = -0.969266 * X + 1.8760108 * Y + 0.041556 * Z;
+  let bb = 0.0556434 * X - 0.2040259 * Y + 1.0572252 * Z;
+  const clipped = r < -0.005 || g < -0.005 || bb < -0.005 || r > 1.005 || g > 1.005 || bb > 1.005;
+  const enc = (c) => {
+    c = Math.min(1, Math.max(0, c));
+    c = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+    return c * 255;
+  };
+  return { hex: rgbToHex(enc(r), enc(g), enc(bb)), clipped };
+}
+const MUNSELL_BY_HUE = (() => {
+  const by = Array.from({ length: 40 }, () => []);
+  for (let i = 0; i < MUNSELL_N; i++) {
+    const o = i * 6;
+    by[MUNSELL_POINTS[o]].push({
+      v: MUNSELL_POINTS[o + 1] / 10,
+      c: MUNSELL_POINTS[o + 2] / 10,
+      L: MUNSELL_POINTS[o + 3] / 10,
+      a: MUNSELL_POINTS[o + 4] / 10,
+      b: MUNSELL_POINTS[o + 5] / 10,
+    });
+  }
+  return by;
+})();
+
+function MunsellExplorer({ onPick }) {
+  const [hueIdx, setHueIdx] = useState(29);
+  const pts = MUNSELL_BY_HUE[hueIdx].filter((p) => p.v >= 1);
+  const values = [...new Set(pts.map((p) => p.v))].sort((x, y) => y - x);
+  const maxC = pts.reduce((m, p) => Math.max(m, p.c), 2);
+  const chromas = [];
+  for (let c = 2; c <= maxC; c += 2) chromas.push(c);
+  const byVC = {};
+  for (const p of pts) byVC[`${p.v}_${p.c}`] = p;
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <button onClick={() => setHueIdx((hueIdx + 39) % 40)} style={{
+          width: 30, height: 30, borderRadius: 4, background: "transparent", color: T.muted,
+          border: `1px solid ${T.line}`, cursor: "pointer", fontFamily: "inherit", fontSize: 14,
+        }}>{"\u2039"}</button>
+        <input type="range" min="0" max="39" step="1" value={hueIdx}
+          onChange={(e) => setHueIdx(Number(e.target.value))}
+          style={{ flex: 1, accentColor: T.ochre }} />
+        <button onClick={() => setHueIdx((hueIdx + 1) % 40)} style={{
+          width: 30, height: 30, borderRadius: 4, background: "transparent", color: T.muted,
+          border: `1px solid ${T.line}`, cursor: "pointer", fontFamily: "inherit", fontSize: 14,
+        }}>{"\u203a"}</button>
+        <span className="display" style={{ fontSize: 22, color: T.bone, width: 80, textAlign: "right", flexShrink: 0 }}>
+          {MUNSELL_HUE_NAMES[hueIdx]}
+        </span>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: `34px repeat(${chromas.length}, minmax(26px, 1fr))`,
+          gap: 3, alignItems: "stretch", minWidth: chromas.length * 30 + 40,
+        }}>
+          <div />
+          {chromas.map((c) => (
+            <div key={"h" + c} className="mono" style={{ fontSize: 9, color: T.faint, textAlign: "center" }}>/{c}</div>
+          ))}
+          {values.map((v) => (
+            <React.Fragment key={"row" + v}>
+              <div className="mono" style={{ fontSize: 10, color: T.muted, alignSelf: "center", textAlign: "right", paddingRight: 4 }}>
+                {v}/
+              </div>
+              {chromas.map((c) => {
+                const p = byVC[`${v}_${c}`];
+                if (!p) return <div key={c} />;
+                const { hex, clipped } = labToRgbHex(p.L, p.a, p.b);
+                return (
+                  <button key={c} onClick={() => onPick(hex)}
+                    title={`${MUNSELL_HUE_NAMES[hueIdx]} ${v}/${c}${clipped ? " (outside sRGB, clamped)" : ""}`}
+                    style={{
+                      height: 26, background: hex, cursor: "pointer", padding: 0, borderRadius: 2,
+                      border: clipped ? `1px dashed ${T.faint}` : `1px solid ${T.line}`,
+                    }} />
+                );
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+      <p style={{ color: T.faint, fontSize: 11, lineHeight: 1.6, marginTop: 10 }}>
+        A constant-hue page of the real Munsell renotation data: value rises up the page, chroma
+        grows to the right, and the ragged right edge is the real gamut of surface colours at this
+        hue. Chips with dashed borders sit outside sRGB and are shown clamped. Click any chip to
+        open it in the record panel; slide or step through all 40 hue pages above.
+      </p>
+    </div>
+  );
+}
+
 function mixPaints(hexA, hexB, wA) {
   const A = hexToRgb(hexA).map(srgbToLinear);
   const B = hexToRgb(hexB).map(srgbToLinear);
@@ -571,6 +704,7 @@ function WheelView({ selected, setSelected }) {
   const size = 480, cx = size / 2, cy = size / 2;
   const rOut = 210, rIn = 118;
   const [harmony, setHarmony] = useState("complement");
+  const [mode, setMode] = useState("ryb");
   const [selIdx, setSelIdx] = useState(null);
   const [nudge, setNudge] = useState(0);
   const [neutral, setNeutral] = useState(0);
@@ -646,6 +780,23 @@ function WheelView({ selected, setSelected }) {
 
   return (
     <div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        {[["ryb", "RYB wheel"], ["munsell", "Munsell pages"]].map(([k, lbl]) => (
+          <button key={k} onClick={() => setMode(k)} style={{
+            padding: "6px 14px", fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase",
+            background: mode === k ? T.ochre : "transparent",
+            color: mode === k ? T.ground : T.muted,
+            border: `1px solid ${mode === k ? T.ochre : T.line}`,
+            borderRadius: 3, cursor: "pointer", fontFamily: "inherit",
+          }}>
+            {lbl}
+          </button>
+        ))}
+      </div>
+      {mode === "munsell" ? (
+        <MunsellExplorer onPick={(h) => setSelected(h)} />
+      ) : (
+      <>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
         {Object.entries(HARMONIES).map(([k, h]) => (
           <button key={k} onClick={() => setHarmony(k)} style={{
@@ -800,6 +951,8 @@ function WheelView({ selected, setSelected }) {
             subtractive and lands darker and duller.
           </p>
         </div>
+      )}
+      </>
       )}
     </div>
   );
@@ -1557,8 +1710,8 @@ export default function App() {
 
           <p style={{ color: T.faint, fontSize: 11, lineHeight: 1.6, marginTop: 14 }}>
             Paint swatches are approximate masstone values compiled for guidance; verify against
-            manufacturer colour charts before purchase. Munsell notation is an approximation until
-            the renotation lookup ships in Phase 2.
+            manufacturer colour charts before purchase. Munsell notation is interpolated from
+            the real renotation dataset (2,734 measured colours, illuminant C adapted to D65).
           </p>
         </aside>
       </main>
