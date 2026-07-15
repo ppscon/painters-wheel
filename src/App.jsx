@@ -85,6 +85,7 @@ function deltaE2000([L1, a1, b1], [L2, a2, b2]) {
    see munsellData): value from the ASTM D1535 polynomial (inverted
    numerically), hue and chroma from inverse-distance weighting of the
    six nearest neighbours in CIELAB, with hue averaged circularly.  */
+const FAMILIES = ["R", "YR", "Y", "GY", "G", "BG", "B", "PB", "P", "RP"];
 const MUNSELL_HUE_NAMES = (() => {
   const steps = ["2.5", "5", "7.5", "10"];
   const out = [];
