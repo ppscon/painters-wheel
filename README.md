@@ -1,6 +1,6 @@
 # The Painter's Wheel
 
-Interactive colour theory for oil painters. Four lesson paintings (contrast, value, hue, chroma) with pin-based colour sampling, approximate Munsell notation, oil paint matching across five manufacturers (Winsor & Newton, Michael Harding, Old Holland, Gamblin, Rembrandt), two-paint mixing recommendations, automatic palette extraction for uploaded images, and an interactive RYB colour wheel.
+Interactive colour theory for oil painters. Four lesson paintings (contrast, value, hue, chroma) with pin-based colour sampling, approximate Munsell notation, oil paint matching across five manufacturers (Winsor & Newton, Michael Harding, Old Holland, Gamblin, Rembrandt), two-paint mixing recommendations, automatic palette extraction for uploaded images, and a dynamic RYB colour wheel with a live mixing lab (hue nudging along the wheel, chroma cancellation toward the complement, tint and shade with a black-versus-complement comparison). Pins and the saved palette persist per browser via localStorage, and the sampling canvas supports touch (drag to inspect, release to pin). A dedicated Zorn Palette tab covers the four-tube portrait method.
 
 ## Stack
 
