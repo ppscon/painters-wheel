@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { MUNSELL_POINTS } from "./munsellData.js";
 
 /* ================================================================
-   THE PAINTER'S WHEEL: Phase 2.2
+   THE PAINTER'S WHEEL: Phase 2.3
    Lessons gateway (Contrast · Value · Hue · Chroma) with pin-based
    study, colour theory guidance, paint matching and mixing advice
    ================================================================ */
@@ -401,8 +401,9 @@ const PAINTS = [
 const PAINT_LABS = PAINTS.map((pt) => ({ ...pt, lab: rgbToLab(...hexToRgb(pt.x)) }));
 const MIXERS = PAINT_LABS.filter((p) => /White|Black/.test(p.n));
 
-function bestMixFor(targetLab, sortedAll) {
-  const pool = [...sortedAll.slice(0, 10), ...MIXERS];
+function bestMixFor(targetLab, sortedAll, activeBox) {
+  const mixers = activeBox ? MIXERS.filter((p) => activeBox.has(p.m + "::" + p.n)) : MIXERS;
+  const pool = [...sortedAll.slice(0, 10), ...mixers];
   const seen = new Set();
   const cands = pool.filter((p) => {
     const k = p.m + p.n;
@@ -601,18 +602,18 @@ function extractPalette(srcCanvas, k = 8) {
 }
 
 /* ---------------- Colour record --------------------------------- */
-function useColorRecord(hex) {
+function useColorRecord(hex, activeBox) {
   return useMemo(() => {
     if (!hex) return null;
     const rgb = hexToRgb(hex);
     const lab = rgbToLab(...rgb);
     const munsell = labToMunsell(lab);
-    const all = PAINT_LABS.map((pt) => ({ ...pt, dE: deltaE2000(lab, pt.lab) })).sort((a, b) => a.dE - b.dE);
+    const all = paintPool(activeBox).map((pt) => ({ ...pt, dE: deltaE2000(lab, pt.lab) })).sort((a, b) => a.dE - b.dE);
     const matches = all.slice(0, 3);
-    const mix = matches[0].dE > 2.5 ? bestMixFor(lab, all) : null;
+    const mix = matches[0].dE > 2.5 && all.length >= 2 ? bestMixFor(lab, all, activeBox) : null;
     const theory = theoryGuidance(lab);
     return { hex, rgb, lab, munsell, matches, mix, theory };
-  }, [hex]);
+  }, [hex, activeBox]);
 }
 function dELabel(dE) {
   if (dE < 3) return { t: "excellent match", c: "#4DB6AC" };
@@ -631,8 +632,8 @@ function SectionRule({ children }) {
   );
 }
 
-function ColorRecord({ hex, sourceLabel, onSave }) {
-  const rec = useColorRecord(hex);
+function ColorRecord({ hex, sourceLabel, onSave, activeBox }) {
+  const rec = useColorRecord(hex, activeBox);
   if (!rec)
     return (
       <div style={{ color: T.faint, fontStyle: "italic", padding: "24px 0", lineHeight: 1.6 }}>
@@ -700,6 +701,11 @@ function ColorRecord({ hex, sourceLabel, onSave }) {
       </div>
 
       <SectionRule>Nearest oil paints</SectionRule>
+      {activeBox && (
+        <div style={{ fontSize: 10, color: T.ochre, marginTop: 6, letterSpacing: 0.5 }}>
+          Matching your paintbox · {activeBox.size} tubes
+        </div>
+      )}
       {rec.matches.map((m, i) => {
         const q = dELabel(m.dE);
         return (
@@ -766,7 +772,7 @@ function ColorRecord({ hex, sourceLabel, onSave }) {
 }
 
 /* ---------------- Colour wheel view ------------------------------ */
-function WheelView({ selected, setSelected }) {
+function WheelView({ selected, setSelected, activeBox }) {
   const size = 480, cx = size / 2, cy = size / 2;
   const rOut = 210, rIn = 118;
   const [harmony, setHarmony] = useState("complement");
@@ -810,7 +816,7 @@ function WheelView({ selected, setSelected }) {
   const lab = working ? rgbToLab(...hexToRgb(working)) : null;
   const chroma = lab ? Math.hypot(lab[1], lab[2]) : 0;
   const value = lab ? lab[0] / 10 : 0;
-  const near = working ? nearestPaint(working) : null;
+  const near = working ? nearestPaint(working, activeBox) : null;
   const chromaWord = chroma < 8 ? "neutralised" : chroma < 25 ? "muted" : "full voice";
 
   const segPath = (i) => {
@@ -1037,10 +1043,10 @@ function mixMulti(parts) {
 }
 const zmix = (spec, extraWhite = 0) =>
   mixMulti([...spec.map(([k, w]) => [ZHEX[k], w]), ...(extraWhite > 0 ? [[ZHEX.white, extraWhite]] : [])]);
-function nearestPaint(hex) {
+function nearestPaint(hex, activeBox) {
   const lab = rgbToLab(...hexToRgb(hex));
   let best = null;
-  for (const pt of PAINT_LABS) {
+  for (const pt of paintPool(activeBox)) {
     const dE = deltaE2000(lab, pt.lab);
     if (!best || dE < best.dE) best = { ...pt, dE };
   }
@@ -1064,7 +1070,7 @@ const ZORN_STEPS = [
   ["The three temperature zones", "Divide the face by its vascular anatomy: golden forehead, flushed mid-face, cool lower face. The zone mixes below are computed live from the four tubes; click any swatch to read it."],
   ["Opaque highlights", "Mix pure White warmed by a pinpoint of Ochre and place it thickly at the apex of form: the nose bridge, the cheekbone fronts, the brow ridge. Leave the marks unblended."],
 ];
-function ZornView({ setSampled }) {
+function ZornView({ setSampled, activeBox }) {
   const [tint, setTint] = useState(0);
   const grey = mixMulti([[ZHEX.black, 1], [ZHEX.white, 2.2]]);
   const warmGround = mixMulti([[ZHEX.red, 3], [ZHEX.ochre, 2], [ZHEX.black, 0.6]]);
@@ -1137,7 +1143,7 @@ function ZornView({ setSampled }) {
       </div>
       {ZORN_MIXES.map((m) => {
         const hex = zmix(m.spec, tint);
-        const near = nearestPaint(hex);
+        const near = nearestPaint(hex, activeBox);
         return (
           <div key={m.name} style={{
             display: "flex", gap: 12, alignItems: "center", padding: "10px 0",
@@ -1626,6 +1632,140 @@ function UploadView({ pins, activePinId, onAddPin, onSelectPin, onNewImage, setS
 }
 
 /* ---------------- App -------------------------------------------- */
+/* ---------------- Paintbox ---------------------------------------- */
+const MAKERS = [...new Set(PAINTS.map((p) => p.m))];
+function paintPool(activeBox) {
+  if (!activeBox) return PAINT_LABS;
+  const p = PAINT_LABS.filter((pt) => activeBox.has(pt.m + "::" + pt.n));
+  return p.length ? p : PAINT_LABS;
+}
+function PaintboxView({ box, setBox, boxOnly, setBoxOnly }) {
+  const toggle = (key) =>
+    setBox((prev) => {
+      const n = new Set(prev);
+      if (n.has(key)) n.delete(key); else n.add(key);
+      return n;
+    });
+  const setMaker = (maker, on) =>
+    setBox((prev) => {
+      const n = new Set(prev);
+      for (const p of PAINTS) {
+        if (p.m === maker) {
+          const k = p.m + "::" + p.n;
+          if (on) n.add(k); else n.delete(k);
+        }
+      }
+      return n;
+    });
+  const active = boxOnly && box.size >= 2;
+  return (
+    <div>
+      <div className="display" style={{ fontSize: 22, color: T.bone }}>My Paintbox</div>
+      <p style={{ color: T.muted, fontSize: 13, lineHeight: 1.7, margin: "8px 0 14px" }}>
+        Tick the tubes you actually own. With restriction switched on, every paint match, mixing
+        recommendation and nearest-tube readout across the whole app searches only your box, so
+        the advice is always something you can reach for. Your selection is saved in this
+        browser.
+      </p>
+
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+        background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, padding: 12,
+      }}>
+        {[[false, "Match all paints"], [true, "Match my paintbox"]].map(([v, lbl]) => (
+          <button key={lbl} onClick={() => setBoxOnly(v)} style={{
+            padding: "7px 14px", fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase",
+            background: boxOnly === v ? T.ochre : "transparent",
+            color: boxOnly === v ? T.ground : T.muted,
+            border: `1px solid ${boxOnly === v ? T.ochre : T.line}`,
+            borderRadius: 3, cursor: "pointer", fontFamily: "inherit",
+          }}>
+            {lbl}
+          </button>
+        ))}
+        <span className="mono" style={{ fontSize: 11, color: T.muted, marginLeft: "auto" }}>
+          {box.size} of {PAINTS.length} tubes
+        </span>
+      </div>
+      {boxOnly && box.size < 2 && (
+        <div style={{
+          marginTop: 8, fontSize: 12, color: T.bone, background: T.panel,
+          border: `1px solid ${T.line}`, borderLeft: `3px solid ${T.vermilion}`,
+          padding: "8px 10px", borderRadius: 3, lineHeight: 1.5,
+        }}>
+          Add at least two tubes to activate the restriction; until then matching falls back to
+          the full database.
+        </div>
+      )}
+      {active && (
+        <div style={{ marginTop: 8, fontSize: 11, color: T.ochre, letterSpacing: 0.5 }}>
+          Restriction active: matches everywhere now come from your {box.size} tubes.
+        </div>
+      )}
+
+      {MAKERS.map((maker) => {
+        const paints = PAINTS.filter((p) => p.m === maker);
+        const owned = paints.filter((p) => box.has(p.m + "::" + p.n)).length;
+        return (
+          <div key={maker} style={{ marginTop: 18 }}>
+            <div style={{
+              display: "flex", alignItems: "baseline", gap: 10,
+              borderBottom: `1px solid ${T.line}`, paddingBottom: 6,
+            }}>
+              <span style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", color: T.muted }}>
+                {maker}
+              </span>
+              <span className="mono" style={{ fontSize: 10, color: T.faint }}>{owned}/{paints.length}</span>
+              <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                <button onClick={() => setMaker(maker, true)} style={{
+                  fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.faint,
+                  background: "transparent", border: `1px dashed ${T.line}`, borderRadius: 3,
+                  padding: "2px 8px", cursor: "pointer", fontFamily: "inherit",
+                }}>All</button>
+                <button onClick={() => setMaker(maker, false)} style={{
+                  fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.faint,
+                  background: "transparent", border: `1px dashed ${T.line}`, borderRadius: 3,
+                  padding: "2px 8px", cursor: "pointer", fontFamily: "inherit",
+                }}>None</button>
+              </span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 6, marginTop: 8 }}>
+              {paints.map((p) => {
+                const key = p.m + "::" + p.n;
+                const on = box.has(key);
+                return (
+                  <button key={key} onClick={() => toggle(key)} style={{
+                    display: "flex", alignItems: "center", gap: 8, textAlign: "left",
+                    padding: "7px 9px", borderRadius: 4, cursor: "pointer", fontFamily: "inherit",
+                    background: on ? T.panel2 : "transparent",
+                    border: `1px solid ${on ? T.ochre : T.line}`,
+                  }}>
+                    <span style={{
+                      width: 22, height: 22, borderRadius: 3, background: p.x,
+                      border: `1px solid ${T.line}`, flexShrink: 0,
+                    }} />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: "block", color: on ? T.bone : T.muted, fontSize: 12, lineHeight: 1.25 }}>
+                        {p.n}
+                      </span>
+                      <span className="mono" style={{ display: "block", color: T.faint, fontSize: 9 }}>
+                        {p.p} · Series {p.s}
+                      </span>
+                    </span>
+                    <span style={{ color: on ? T.ochre : T.line, fontSize: 13, flexShrink: 0 }}>
+                      {on ? "✓" : "+"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const PW_STORE = (() => {
   try {
     const k = "__pw_probe";
@@ -1644,6 +1784,8 @@ const PW_INIT_PINS = Object.assign(
   (PW_SAVED && PW_SAVED.pins) || {},
   { upload: [] }
 );
+const PW_INIT_BOX = new Set((PW_SAVED && PW_SAVED.box) || []);
+const PW_INIT_BOXONLY = !!(PW_SAVED && PW_SAVED.boxOnly);
 let PIN_SEQ = 1;
 for (const k in PW_INIT_PINS) for (const p of PW_INIT_PINS[k]) if (p.id >= PIN_SEQ) PIN_SEQ = p.id + 1;
 export default function App() {
@@ -1656,6 +1798,9 @@ export default function App() {
   const [activePin, setActivePin] = useState(null);
   const [palette, setPalette] = useState((PW_SAVED && PW_SAVED.palette) || []);
   const [viewHex, setViewHex] = useState(null);
+  const [box, setBox] = useState(PW_INIT_BOX);
+  const [boxOnly, setBoxOnly] = useState(PW_INIT_BOXONLY);
+  const activeBox = boxOnly && box.size >= 2 ? box : null;
 
   useEffect(() => {
     const l = document.createElement("link");
@@ -1668,9 +1813,9 @@ export default function App() {
   useEffect(() => {
     if (!PW_STORE) return;
     try {
-      PW_STORE.setItem(PW_KEY, JSON.stringify({ pins: { ...pins, upload: [] }, palette }));
+      PW_STORE.setItem(PW_KEY, JSON.stringify({ pins: { ...pins, upload: [] }, palette, box: [...box], boxOnly }));
     } catch (e) { /* storage full or unavailable; persistence is best-effort */ }
-  }, [pins, palette]);
+  }, [pins, palette, box, boxOnly]);
 
   const ctxKey = tab === "lessons" ? lessonId : tab === "upload" ? "upload" : null;
   const ctxPins = ctxKey ? pins[ctxKey] : [];
@@ -1720,6 +1865,7 @@ export default function App() {
     ["upload", "Your Canvas"],
     ["wheel", "Colour Wheel"],
     ["zorn", "Zorn Palette"],
+    ["box", "Paintbox"],
   ];
 
   return (
@@ -1767,7 +1913,7 @@ export default function App() {
       }}>
         <section style={{ background: T.panel, border: `1px solid ${T.line}`, borderRadius: 6, padding: 20 }}>
           {tab === "wheel" && (
-            <WheelView selected={wheelHex} setSelected={(h) => { setWheelHex(h); setViewHex(null); }} />
+            <WheelView activeBox={activeBox} selected={wheelHex} setSelected={(h) => { setWheelHex(h); setViewHex(null); }} />
           )}
           {tab === "lessons" && (
             <LessonsView lessonId={lessonId} setLessonId={setLessonId}
@@ -1781,7 +1927,10 @@ export default function App() {
               setSampled={(h) => { setClusterHex(h); setActivePin(null); setViewHex(null); }} />
           )}
           {tab === "zorn" && (
-            <ZornView setSampled={(h) => { setZornHex(h); setViewHex(null); setActivePin(null); }} />
+            <ZornView activeBox={activeBox} setSampled={(h) => { setZornHex(h); setViewHex(null); setActivePin(null); }} />
+          )}
+          {tab === "box" && (
+            <PaintboxView box={box} setBox={setBox} boxOnly={boxOnly} setBoxOnly={setBoxOnly} />
           )}
         </section>
 
@@ -1790,7 +1939,7 @@ export default function App() {
             <div style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", color: T.ochre, marginBottom: 12 }}>
               Colour record
             </div>
-            <ColorRecord hex={activeHex} sourceLabel={sourceLabel} onSave={save} />
+            <ColorRecord hex={activeHex} sourceLabel={sourceLabel} onSave={save} activeBox={activeBox} />
           </div>
 
           {ctxKey && ctxPins.length > 0 && (
