@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { MUNSELL_POINTS } from "./munsellData.js";
 
 /* ================================================================
-   THE PAINTER'S WHEEL: Phase 2.0
+   THE PAINTER'S WHEEL: Phase 2.1
    Lessons gateway (Contrast · Value · Hue · Chroma) with pin-based
    study, colour theory guidance, paint matching and mixing advice
    ================================================================ */
@@ -1186,28 +1186,88 @@ function Pin({ pin, active, onSelect }) {
 }
 
 /* ---------------- Generic sampling canvas with pins --------------- */
+const VIEW_MODES = [
+  ["colour", "Colour"], ["value", "Value"], ["p3", "3-step"], ["p5", "5-step"], ["p9", "9-step"],
+];
+const POSTER_STEPS = { p3: 3, p5: 5, p9: 9 };
+function greyToL(v) {
+  const Y = srgbToLinear(v);
+  return Y > 0.008856 ? 116 * Math.cbrt(Y) - 16 : Y * 903.3;
+}
+function lToGrey(L) {
+  const fy = (L + 16) / 116, d = 6 / 29;
+  const Y = fy > d ? fy * fy * fy : 3 * d * d * (fy - 4 / 29);
+  return linearToSrgb(Y);
+}
+const POSTER_LUTS = {};
+function posterLUT(n) {
+  if (POSTER_LUTS[n]) return POSTER_LUTS[n];
+  const lut = new Uint8ClampedArray(256);
+  for (let v = 0; v < 256; v++) {
+    const L = greyToL(v);
+    const band = Math.min(n - 1, Math.floor((L / 100) * n));
+    lut[v] = Math.round(lToGrey(((band + 0.5) * 100) / n));
+  }
+  POSTER_LUTS[n] = lut;
+  return lut;
+}
+function computeLuminosityHist(src) {
+  const w = 128, h = Math.max(1, Math.round((src.height / src.width) * w));
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const cx = c.getContext("2d");
+  cx.drawImage(src, 0, 0, w, h);
+  const d = cx.getImageData(0, 0, w, h).data;
+  const bins = new Array(25).fill(0);
+  let shadow = 0, mids = 0, light = 0, total = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    const L = rgbToLab(d[i], d[i + 1], d[i + 2])[0];
+    bins[Math.min(24, Math.floor((L / 100) * 25))]++;
+    if (L < 35) shadow++; else if (L < 70) mids++; else light++;
+    total++;
+  }
+  const max = Math.max(...bins, 1);
+  return {
+    bins: bins.map((b) => b / max),
+    shadow: (shadow / total) * 100,
+    mids: (mids / total) * 100,
+    light: (light / total) * 100,
+  };
+}
 function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extract, onPalette }) {
   const wrapRef = useRef(null);
   const dispRef = useRef(null);
   const srcRef = useRef(null);
   const loupeRef = useRef(null);
   const [status, setStatus] = useState("loading");
-  const [gray, setGray] = useState(false);
+  const [view, setView] = useState("colour");
+  const [hist, setHist] = useState(null);
   const [loupe, setLoupe] = useState(null);
   const lastPt = useRef(null);
   const suppressClick = useRef(false);
 
-  const draw = useCallback((grayscale) => {
+  const draw = useCallback((mode) => {
     const src = srcRef.current, disp = dispRef.current;
     if (!src || !disp) return;
     const ctx = disp.getContext("2d");
-    ctx.filter = grayscale ? "grayscale(1)" : "none";
+    ctx.filter = mode === "colour" ? "none" : "grayscale(1)";
     ctx.drawImage(src, 0, 0);
     ctx.filter = "none";
+    const n = POSTER_STEPS[mode];
+    if (n) {
+      const img = ctx.getImageData(0, 0, disp.width, disp.height);
+      const d = img.data, lut = posterLUT(n);
+      for (let i = 0; i < d.length; i += 4) {
+        const g = lut[d[i]];
+        d[i] = g; d[i + 1] = g; d[i + 2] = g;
+      }
+      ctx.putImageData(img, 0, 0);
+    }
   }, []);
 
   useEffect(() => {
     setStatus("loading");
+    setHist(null);
     const img = new Image();
     if (source.crossOrigin) img.crossOrigin = "anonymous";
     img.onload = () => {
@@ -1220,16 +1280,17 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
       srcRef.current = src;
       const disp = dispRef.current;
       disp.width = w; disp.height = h;
-      draw(false);
-      setGray(false);
+      draw("colour");
+      setView("colour");
       setStatus("ready");
+      setHist(computeLuminosityHist(src));
       if (extract && onPalette) onPalette(extractPalette(src));
     };
     img.onerror = () => setStatus("error");
     img.src = source.url;
   }, [source, draw, extract, onPalette]);
 
-  useEffect(() => { if (status === "ready") draw(gray); }, [gray, status, draw]);
+  useEffect(() => { if (status === "ready") draw(view); }, [view, status, draw]);
 
   const toCanvasCoords = (e) => {
     const disp = dispRef.current;
@@ -1270,7 +1331,6 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
     const { x, y, fx, fy } = toCanvasCoords(e);
     onAddPin({ fx, fy, hex: sampleAvg(x, y) });
   };
-
   const onTouch = (e) => {
     if (status !== "ready") return;
     const t = e.touches && e.touches[0];
@@ -1289,18 +1349,23 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontSize: 11, color: T.faint, fontStyle: "italic" }}>
           Click to drop a pin · click a pin to recall it
         </span>
-        <button onClick={() => setGray((g) => !g)} style={{
-          padding: "6px 14px", fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase",
-          background: gray ? T.bone : "transparent", color: gray ? T.ground : T.muted,
-          border: `1px solid ${gray ? T.bone : T.line}`, borderRadius: 3,
-          cursor: "pointer", fontFamily: "inherit", flexShrink: 0,
-        }}>
-          {gray ? "Colour view" : "Value view"}
-        </button>
+        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          {VIEW_MODES.map(([k, lbl]) => (
+            <button key={k} onClick={() => setView(k)} style={{
+              padding: "6px 10px", fontSize: 10, letterSpacing: 1, textTransform: "uppercase",
+              background: view === k ? T.bone : "transparent",
+              color: view === k ? T.ground : T.muted,
+              border: `1px solid ${view === k ? T.bone : T.line}`,
+              borderRadius: 3, cursor: "pointer", fontFamily: "inherit",
+            }}>
+              {lbl}
+            </button>
+          ))}
+        </div>
       </div>
       <div ref={wrapRef} style={{ position: "relative", lineHeight: 0, border: `1px solid ${T.line}`, borderRadius: 4, overflow: "hidden" }}>
         {status === "loading" && (
@@ -1329,6 +1394,36 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
           </div>
         )}
       </div>
+      {hist && status === "ready" && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ position: "relative" }}>
+            <div style={{ display: "flex", gap: 1, alignItems: "flex-end", height: 54 }}>
+              {hist.bins.map((b, i) => {
+                const g = Math.round(lToGrey(((i + 0.5) * 100) / 25));
+                return (
+                  <div key={i} style={{
+                    flex: 1, height: `${Math.max(3, b * 100)}%`,
+                    background: rgbToHex(g, g, g), borderRadius: 1,
+                  }} />
+                );
+              })}
+            </div>
+            <div style={{ position: "absolute", left: "35%", top: 0, bottom: 0, width: 1, background: T.ochre, opacity: 0.55 }} />
+            <div style={{ position: "absolute", left: "70%", top: 0, bottom: 0, width: 1, background: T.ochre, opacity: 0.55 }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 5 }}>
+            <span className="mono" style={{ fontSize: 10, color: T.muted }}>Shadow {hist.shadow.toFixed(0)}%</span>
+            <span className="mono" style={{ fontSize: 10, color: T.muted }}>Mid {hist.mids.toFixed(0)}%</span>
+            <span className="mono" style={{ fontSize: 10, color: T.muted }}>Lights {hist.light.toFixed(0)}%</span>
+          </div>
+          <p style={{ color: T.faint, fontSize: 11, lineHeight: 1.55, marginTop: 4 }}>
+            Luminosity histogram in L*, darks to the left; the ochre rules mark the shadow, mid
+            and light zones. The step views above posterise on equal L* bands: 3-step is the
+            classic notan, 5-step is a working value plan, 9-step approximates the Munsell value
+            scale.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
