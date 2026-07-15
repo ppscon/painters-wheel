@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { MUNSELL_POINTS } from "./munsellData.js";
 
 /* ================================================================
-   THE PAINTER'S WHEEL: Phase 2.3
+   THE PAINTER'S WHEEL: Phase 2.4
    Lessons gateway (Contrast · Value · Hue · Chroma) with pin-based
    study, colour theory guidance, paint matching and mixing advice
    ================================================================ */
@@ -664,6 +664,7 @@ function ColorRecord({ hex, sourceLabel, onSave, activeBox }) {
             }}>
               Munsell ≈ {rec.munsell}
             </span>
+            <Tip text={'Munsell notation: hue, then value/chroma. 7.5R 5.2/19 reads as a red of hue step 7.5, value 5.2 (mid), chroma 19 (intense). Interpolated here from the 2,734 measured renotation colours.'} side="bottom" />
           </div>
         </div>
       </div>
@@ -700,7 +701,7 @@ function ColorRecord({ hex, sourceLabel, onSave, activeBox }) {
         )}
       </div>
 
-      <SectionRule>Nearest oil paints</SectionRule>
+      <SectionRule>Nearest oil paints<Tip text={"ΔE is CIEDE2000 perceptual difference: under 2 barely distinguishable, under 6 close, over 12 needs mixing. O/SO/ST/T = opaque to transparent; Series is the maker's price band."} /></SectionRule>
       {activeBox && (
         <div style={{ fontSize: 10, color: T.ochre, marginTop: 6, letterSpacing: 0.5 }}>
           Matching your paintbox · {activeBox.size} tubes
@@ -733,7 +734,7 @@ function ColorRecord({ hex, sourceLabel, onSave, activeBox }) {
 
       {rec.mix && (
         <div>
-          <SectionRule>Mixing recommendation</SectionRule>
+          <SectionRule>Mixing recommendation<Tip text={'Previewed with Kubelka-Munk pigment mixing on reconstructed reflectance spectra, so the swatch behaves like paint, not light. Brands vary, so confirm on the palette.'} /></SectionRule>
           <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "12px 0 4px" }}>
             <div style={{ width: 30, height: 30, borderRadius: 4, background: rec.mix.a.x, border: `1px solid ${T.line}` }} />
             <span style={{ color: T.muted, fontSize: 15 }}>+</span>
@@ -881,6 +882,7 @@ function WheelView({ selected, setSelected, activeBox }) {
             {h.label}
           </button>
         ))}
+        <Tip text={'Palette-planning relationships: the complement sits opposite and cancels; split-complements soften that chord; analogous neighbours stay harmonious; a triad balances three hues.'} side="bottom" />
       </div>
       <svg viewBox={`0 0 ${size} ${size}`} style={{ width: "100%", maxWidth: 520, display: "block", margin: "0 auto" }}>
         {selIdx != null &&
@@ -1417,6 +1419,7 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontSize: 11, color: T.faint, fontStyle: "italic" }}>
           Click to drop a pin · click a pin to recall it
+          <Tip text={'Colour shows the picture as painted. Value strips hue. The step views posterise on equal L* bands: 3-step is a notan, 5-step a value plan, 9-step near the Munsell scale. Pins always sample the true colour.'} side="bottom" />
         </span>
         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
           {VIEW_MODES.map(([k, lbl]) => (
@@ -1632,6 +1635,122 @@ function UploadView({ pins, activePinId, onAddPin, onSelectPin, onNewImage, setS
 }
 
 /* ---------------- App -------------------------------------------- */
+/* ---------------- Tooltips and help ------------------------------- */
+function Tip({ text, side = "top" }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      style={{ position: "relative", display: "inline-block", verticalAlign: "middle" }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        aria-label="More information"
+        onClick={() => setOpen((o) => !o)}
+        onBlur={() => setOpen(false)}
+        style={{
+          width: 15, height: 15, borderRadius: "50%", padding: 0, marginLeft: 5,
+          background: "transparent", border: `1px solid ${T.faint}`, color: T.faint,
+          fontSize: 9, lineHeight: 1, cursor: "help", fontFamily: "inherit",
+          verticalAlign: "middle",
+        }}
+      >
+        ?
+      </button>
+      {open && (
+        <span
+          role="tooltip"
+          style={{
+            position: "absolute",
+            [side === "top" ? "bottom" : "top"]: "150%",
+            left: "50%", transform: "translateX(-50%)",
+            width: "min(240px, 72vw)", background: T.ground,
+            border: `1px solid ${T.line}`, borderLeft: `3px solid ${T.ochre}`,
+            padding: "9px 11px", borderRadius: 4, color: T.bone,
+            fontSize: 11, lineHeight: 1.55, zIndex: 30,
+            boxShadow: "0 6px 18px rgba(0,0,0,.55)",
+            textTransform: "none", letterSpacing: 0, fontStyle: "normal",
+            fontWeight: 400, textAlign: "left", whiteSpace: "normal",
+          }}
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
+const HELP_SECTIONS = [
+  ["Lessons", "Four paintings teach the four pillars. Hover (or touch-drag) for the loupe, click (or lift your finger) to drop a numbered pin, and click a pin to recall its record. The view buttons switch between colour, plain value, and 3, 5 or 9-step posterisation; the histogram beneath shows how the picture's values mass into shadow, mid and light zones."],
+  ["Your Canvas", "Load any image of your own; it stays in your browser and is never uploaded. You get the same pinning, value views and histogram, plus an automatic extraction of the picture's eight dominant colour clusters."],
+  ["Colour Wheel", "The RYB wheel is a mixing lab: pick a hue, then lean it warm or cool along the wheel, cancel its chroma toward the complement, or take it up and down in value, comparing darkening with black against darkening with the complement. The Munsell pages toggle opens all 40 constant-hue pages of the measured renotation data."],
+  ["Zorn Palette", "The four-tube portrait method: white, yellow ochre, cadmium red and ivory black. The mixing lab derives the classic earth tones live, the relativity demo shows one grey reading blue against a warm ground, and the block-in walks the five stages of a classical portrait."],
+  ["Paintbox", "Tick the tubes you own and switch matching restriction on; every paint match, mixing recommendation and nearest-tube readout then searches only your box. Needs at least two tubes to activate."],
+  ["The colour record", "Every pinned or picked colour gets its hex, RGB, Lab and Munsell notation, temperature and value-zone guidance, the three nearest tube paints with difference scores, and, when no single tube is close enough, a two-paint mixing recommendation with ratios."],
+  ["Your data", "Pins, the saved palette and your paintbox persist in this browser only; nothing is sent to a server. Clearing site data resets them."],
+];
+const HELP_GLOSSARY = [
+  ["Hue", "Which colour family a colour belongs to: red, yellow-green, blue and so on."],
+  ["Value", "Lightness on a dark-to-light scale; the structural backbone of a painting."],
+  ["Chroma", "Intensity or saturation; how far a colour sits from neutral grey."],
+  ["Munsell H V/C", "A colour specified as hue, value/chroma, e.g. 7.5R 5.2/19. Here it is interpolated from the 2,734 measured renotation colours."],
+  ["\u0394E", "Perceptual colour difference (CIEDE2000). Under 2 is barely distinguishable, under 6 is close, over 12 means mixing is required."],
+  ["Notan", "A design reduced to flat light and dark shapes; the 3-step view produces one."],
+  ["Kubelka-Munk", "The pigment-mixing model used for every mix preview, which is why complements neutralise and blue plus yellow makes a painter's green rather than light's grey."],
+  ["Opacity codes", "O opaque, SO semi-opaque, ST semi-transparent, T transparent. Series is the maker's price band."],
+];
+function HelpOverlay({ onClose }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(10,7,5,.72)", zIndex: 50,
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 18,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: T.panel, border: `1px solid ${T.line}`, borderRadius: 8,
+          maxWidth: 660, width: "100%", maxHeight: "84vh", overflowY: "auto",
+          padding: "22px 24px", boxShadow: "0 18px 60px rgba(0,0,0,.6)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+          <div className="display" style={{ fontSize: 24, color: T.bone }}>How to use The Painter's Wheel</div>
+          <button onClick={onClose} aria-label="Close help" style={{
+            background: "transparent", border: "none", color: T.muted, fontSize: 20,
+            cursor: "pointer", fontFamily: "inherit", padding: "0 2px",
+          }}>
+            ×
+          </button>
+        </div>
+        {HELP_SECTIONS.map(([t, d]) => (
+          <div key={t} style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", color: T.ochre }}>{t}</div>
+            <div style={{ color: T.muted, fontSize: 13, lineHeight: 1.65, marginTop: 4 }}>{d}</div>
+          </div>
+        ))}
+        <div style={{ marginTop: 18, borderTop: `1px solid ${T.line}`, paddingTop: 12 }}>
+          <div style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", color: T.ochre, marginBottom: 8 }}>
+            Glossary
+          </div>
+          {HELP_GLOSSARY.map(([t, d]) => (
+            <div key={t} style={{ display: "flex", gap: 10, padding: "5px 0", borderBottom: `1px solid ${T.line}` }}>
+              <span style={{ color: T.bone, fontSize: 12, fontWeight: 600, width: 110, flexShrink: 0 }}>{t}</span>
+              <span style={{ color: T.muted, fontSize: 12, lineHeight: 1.55 }}>{d}</span>
+            </div>
+          ))}
+        </div>
+        <p style={{ color: T.faint, fontSize: 11, lineHeight: 1.55, marginTop: 12 }}>
+          Look for the small ? markers throughout the app; each explains the term or number it
+          sits beside.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Paintbox ---------------------------------------- */
 const MAKERS = [...new Set(PAINTS.map((p) => p.m))];
 function paintPool(activeBox) {
@@ -1801,6 +1920,7 @@ export default function App() {
   const [box, setBox] = useState(PW_INIT_BOX);
   const [boxOnly, setBoxOnly] = useState(PW_INIT_BOXONLY);
   const activeBox = boxOnly && box.size >= 2 ? box : null;
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     const l = document.createElement("link");
@@ -1882,7 +2002,7 @@ export default function App() {
         @media (max-width: 900px) { .pw-main { grid-template-columns: 1fr !important; } }
       `}</style>
 
-      <header style={{ padding: "34px 24px 18px", borderBottom: `1px solid ${T.line}`, textAlign: "center" }}>
+      <header style={{ padding: "34px 24px 18px", borderBottom: `1px solid ${T.line}`, textAlign: "center", position: "relative" }}>
         <div style={{ fontSize: 11, letterSpacing: 5, textTransform: "uppercase", color: T.ochre }}>
           Colour theory for oil painters
         </div>
@@ -1892,6 +2012,13 @@ export default function App() {
         <div className="display" style={{ fontStyle: "italic", fontSize: 17, color: T.muted }}>
           Four paintings, four lessons: contrast, value, hue and chroma, and the paints that carry them
         </div>
+        <button onClick={() => setHelpOpen(true)} title="Help" aria-label="Open help" style={{
+          position: "absolute", top: 16, right: 16, width: 32, height: 32, borderRadius: "50%",
+          background: "transparent", border: `1px solid ${T.line}`, color: T.muted,
+          fontSize: 14, cursor: "pointer", fontFamily: "inherit",
+        }}>
+          ?
+        </button>
       </header>
 
       <nav style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", borderBottom: `1px solid ${T.line}` }}>
@@ -2019,6 +2146,7 @@ export default function App() {
           </p>
         </aside>
       </main>
+      {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
     </div>
   );
 }
