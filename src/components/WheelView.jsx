@@ -70,6 +70,11 @@ function MunsellExplorer({ onPick, jump, activeBox }) {
           </span>
         )}
       </div>
+      {pts.length === 0 && (
+        <div style={{ padding: "50px 24px", textAlign: "center", color: T.faint, fontStyle: "italic" }}>
+          Loading the renotation data…
+        </div>
+      )}
       <div style={{ overflowX: "auto" }}>
         <div style={{
           display: "grid",

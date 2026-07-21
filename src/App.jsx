@@ -5,21 +5,31 @@
    study, colour theory guidance, paint matching and mixing advice
    ================================================================ */
 
-import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import { T } from "./components/ui.jsx";
 import { hexToRgb, rgbToLab } from "./color/math.js";
-import { labToMunsell, munsellPageIndex } from "./color/munsell.js";
+import { labToMunsell, munsellPageIndex, loadMunsell } from "./color/munsell.js";
 import { nearestPaint } from "./color/paints.js";
 import { LESSONS } from "./data/lessons.js";
 import { ColorRecord } from "./components/ColorRecord.jsx";
-import { WheelView } from "./components/WheelView.jsx";
 import { LessonsView } from "./components/LessonsView.jsx";
-import { UploadView } from "./components/UploadView.jsx";
-import { ZornView } from "./components/ZornView.jsx";
-import { PaintboxView } from "./components/PaintboxView.jsx";
-import { ShoppingListView } from "./components/ShoppingListView.jsx";
-import { StudySheet } from "./components/StudySheet.jsx";
-import { HelpOverlay } from "./components/HelpOverlay.jsx";
+/* Only the landing tab ships in the main chunk; everything else loads
+   on first visit to its tab (cache headers make repeats free). */
+const WheelView = lazy(() => import("./components/WheelView.jsx").then((m) => ({ default: m.WheelView })));
+const UploadView = lazy(() => import("./components/UploadView.jsx").then((m) => ({ default: m.UploadView })));
+const ZornView = lazy(() => import("./components/ZornView.jsx").then((m) => ({ default: m.ZornView })));
+const PaintboxView = lazy(() => import("./components/PaintboxView.jsx").then((m) => ({ default: m.PaintboxView })));
+const ShoppingListView = lazy(() => import("./components/ShoppingListView.jsx").then((m) => ({ default: m.ShoppingListView })));
+const StudySheet = lazy(() => import("./components/StudySheet.jsx").then((m) => ({ default: m.StudySheet })));
+const HelpOverlay = lazy(() => import("./components/HelpOverlay.jsx").then((m) => ({ default: m.HelpOverlay })));
+
+function TabLoading() {
+  return (
+    <div style={{ padding: "60px 24px", textAlign: "center", color: "#9B8D72", fontStyle: "italic" }}>
+      Loading…
+    </div>
+  );
+}
 import { PW_STORE, PW_KEY, loadSaved, nextPinId } from "./state/persist.js";
 import { encodeStudy, decodeStudy } from "./state/share.js";
 
@@ -110,6 +120,23 @@ export default function App() {
   }, [liveTargets, uploadName]);
 
   const recordRef = useRef(null);
+
+  /* The renotation dataset loads out-of-band (see munsell.js); this
+     flip re-renders once so "…" notations resolve, and gives the
+     Munsell explorer a loading state. */
+  const [munsellLoaded, setMunsellLoaded] = useState(false);
+  useEffect(() => {
+    let on = true;
+    loadMunsell().then(() => { if (on) setMunsellLoaded(true); }).catch(() => { /* retried when the wheel opens */ });
+    return () => { on = false; };
+  }, []);
+  useEffect(() => {
+    if (tab === "wheel" && !munsellLoaded) {
+      let on = true;
+      loadMunsell().then(() => { if (on) setMunsellLoaded(true); }).catch(() => {});
+      return () => { on = false; };
+    }
+  }, [tab, munsellLoaded]);
 
   useEffect(() => {
     if (!PW_STORE) return;
@@ -325,6 +352,7 @@ export default function App() {
         display: "grid", gridTemplateColumns: "minmax(0, 1fr) 340px", gap: 24,
       }}>
         <section style={{ background: T.panel, border: `1px solid ${T.line}`, borderRadius: 6, padding: 20 }}>
+          <Suspense fallback={<TabLoading />}>
           {tab === "wheel" && (
             <WheelView activeBox={activeBox} munsellJump={munsellJump} selected={wheelHex} setSelected={(h) => { setWheelHex(h); setViewHex(null); }} />
           )}
@@ -358,6 +386,7 @@ export default function App() {
           {tab === "box" && (
             <PaintboxView box={box} setBox={setBox} boxOnly={boxOnly} setBoxOnly={setBoxOnly} />
           )}
+          </Suspense>
         </section>
 
         <aside>
@@ -542,16 +571,18 @@ export default function App() {
         </aside>
       </main>
       {activeHex && tab !== "box" && tab !== "shop" && <MobileReadout hex={activeHex} activeBox={activeBox} recordRef={recordRef} />}
-      {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
-      {sheetOpen && sheetImage && ctxPins.length > 0 && (
-        <StudySheet title={sheetTitle} subtitle={sheetSubtitle} image={sheetImage}
-          pins={ctxPins} activeBox={activeBox} onClose={() => setSheetOpen(false)} />
-      )}
-      {paletteSheet && uploadSource && (
-        <StudySheet title={uploadName || "Your canvas"} subtitle="Colours in use · dominant clusters"
-          image={uploadSource.url} pins={paletteSheet} activeBox={activeBox}
-          onClose={() => setPaletteSheet(null)} />
-      )}
+      <Suspense fallback={null}>
+        {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
+        {sheetOpen && sheetImage && ctxPins.length > 0 && (
+          <StudySheet title={sheetTitle} subtitle={sheetSubtitle} image={sheetImage}
+            pins={ctxPins} activeBox={activeBox} onClose={() => setSheetOpen(false)} />
+        )}
+        {paletteSheet && uploadSource && (
+          <StudySheet title={uploadName || "Your canvas"} subtitle="Colours in use · dominant clusters"
+            image={uploadSource.url} pins={paletteSheet} activeBox={activeBox}
+            onClose={() => setPaletteSheet(null)} />
+        )}
+      </Suspense>
     </div>
   );
 }

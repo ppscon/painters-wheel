@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { labToMunsell, munsellValueFromY, FAMILIES } from "../src/color/munsell.js";
+import { labToMunsell, munsellValueFromY, FAMILIES, initMunsell } from "../src/color/munsell.js";
 import { MUNSELL_POINTS } from "../src/munsellData.js";
+
+initMunsell(MUNSELL_POINTS);
 import { rgbToLab, hexToRgb } from "../src/color/math.js";
 
 describe("renotation lookup", () => {
