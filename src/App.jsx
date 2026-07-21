@@ -223,11 +223,16 @@ export default function App() {
         @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
         @media (max-width: 900px) { .pw-main { grid-template-columns: 1fr !important; } }
         @media print {
-          body * { visibility: hidden !important; }
-          .pw-sheet, .pw-sheet * { visibility: visible !important; }
-          .pw-sheet-overlay { position: absolute !important; inset: 0 !important; padding: 0 !important; background: none !important; display: block !important; }
+          body { background: #FBF7EE !important; }
+          header, .pw-main, .pw-help-overlay { display: none !important; }
+          .pw-sheet-overlay { position: static !important; inset: auto !important; padding: 0 !important; background: none !important; display: block !important; overflow: visible !important; height: auto !important; }
           .pw-sheet { max-width: none !important; border-radius: 0 !important; box-shadow: none !important; }
           .pw-sheet-actions { display: none !important; }
+          .pw-sheet, .pw-sheet * {
+            visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
         }
       `}</style>
 

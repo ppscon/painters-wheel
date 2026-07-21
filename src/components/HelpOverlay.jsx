@@ -22,6 +22,7 @@ const HELP_GLOSSARY = [
 function HelpOverlay({ onClose }) {
   return (
     <div
+      className="pw-help-overlay"
       onClick={onClose}
       style={{
         position: "fixed", inset: 0, background: "rgba(10,7,5,.72)", zIndex: 50,
