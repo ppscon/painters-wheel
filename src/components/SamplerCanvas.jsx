@@ -51,6 +51,8 @@ function computeLuminosityHist(src) {
     light: (light / total) * 100,
   };
 }
+const COARSE = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+
 function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extract, onPalette }) {
   const wrapRef = useRef(null);
   const dispRef = useRef(null);
@@ -60,8 +62,10 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
   const [view, setView] = useState("colour");
   const [hist, setHist] = useState(null);
   const [loupe, setLoupe] = useState(null);
-  const lastPt = useRef(null);
-  const suppressClick = useRef(false);
+  const [hint, setHint] = useState(false);
+  const statusRef = useRef(status);
+  const addPinRef = useRef(onAddPin);
+  useEffect(() => { statusRef.current = status; addPinRef.current = onAddPin; });
 
   const draw = useCallback((mode) => {
     const src = srcRef.current, disp = dispRef.current;
@@ -129,12 +133,22 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
     for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
     return rgbToHex(r / n, g / n, b / n);
   };
-  const onMove = (e, lift) => {
-    if (status !== "ready") return;
-    const { x, y } = toCanvasCoords(e);
+  /* One sample per animation frame, however fast the pointer moves. */
+  const rafId = useRef(0);
+  const pendingPt = useRef(null);
+  const doSample = useCallback((clientX, clientY, touch) => {
+    if (statusRef.current !== "ready" || !srcRef.current || !dispRef.current || !wrapRef.current) return;
+    const disp = dispRef.current;
+    const rect = disp.getBoundingClientRect();
+    const fx = (clientX - rect.left) / rect.width;
+    const fy = (clientY - rect.top) / rect.height;
+    const x = Math.round(fx * disp.width), y = Math.round(fy * disp.height);
     const hex = sampleAvg(x, y);
     const wrapRect = wrapRef.current.getBoundingClientRect();
-    setLoupe({ x: e.clientX - wrapRect.left, y: e.clientY - wrapRect.top - (lift ? 90 : 0), hex });
+    setLoupe({
+      x: clientX - wrapRect.left, y: clientY - wrapRect.top,
+      w: wrapRect.width, h: wrapRect.height, hex, touch,
+    });
     const lc = loupeRef.current;
     if (lc) {
       const lctx = lc.getContext("2d");
@@ -144,34 +158,103 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
       lctx.strokeStyle = "rgba(237,228,211,.9)";
       lctx.strokeRect(56, 56, 8, 8);
     }
-  };
+  }, []);
+  const queueMove = useCallback((clientX, clientY, touch) => {
+    pendingPt.current = { clientX, clientY, touch };
+    if (rafId.current) return;
+    rafId.current = requestAnimationFrame(() => {
+      rafId.current = 0;
+      const p = pendingPt.current;
+      if (p) doSample(p.clientX, p.clientY, p.touch);
+    });
+  }, [doSample]);
+  useEffect(() => () => { if (rafId.current) cancelAnimationFrame(rafId.current); }, []);
+
   const onClick = (e) => {
-    if (suppressClick.current) { suppressClick.current = false; return; }
     if (status !== "ready") return;
     const { x, y, fx, fy } = toCanvasCoords(e);
     onAddPin({ fx, fy, hex: sampleAvg(x, y) });
   };
-  const onTouch = (e) => {
-    if (status !== "ready") return;
-    const t = e.touches && e.touches[0];
-    if (!t) return;
-    lastPt.current = { clientX: t.clientX, clientY: t.clientY };
-    onMove(t, true);
-  };
-  const onTouchEnd = () => {
-    if (status !== "ready" || !lastPt.current) return;
-    const { x, y, fx, fy } = toCanvasCoords(lastPt.current);
-    onAddPin({ fx, fy, hex: sampleAvg(x, y) });
-    lastPt.current = null;
-    setLoupe(null);
-    suppressClick.current = true;
-  };
+
+  /* Touch model: hold ~300ms to start sampling (loupe appears), drag to
+     inspect, lift to pin. A moving touch is a scroll and is left to the
+     browser (touch-action: pan-y); a quick tap just shows a hint. This
+     replaces the old behaviour where every touch dropped a pin on lift
+     and the canvas trapped page scrolling. Native listeners are used so
+     touchmove can preventDefault once sampling has claimed the gesture. */
+  useEffect(() => {
+    const el = dispRef.current;
+    if (!el) return;
+    const SLOP = 12, HOLD_MS = 300;
+    let gesture = null;
+    const start = (e) => {
+      const t = e.touches[0];
+      if (!t || statusRef.current !== "ready") return;
+      gesture = {
+        sampling: false, startX: t.clientX, startY: t.clientY, lastX: t.clientX, lastY: t.clientY,
+        timer: setTimeout(() => {
+          if (!gesture) return;
+          gesture.sampling = true;
+          if (navigator.vibrate) navigator.vibrate(8);
+          queueMove(gesture.lastX, gesture.lastY, true);
+        }, HOLD_MS),
+      };
+    };
+    const move = (e) => {
+      if (!gesture) return;
+      const t = e.touches[0];
+      gesture.lastX = t.clientX; gesture.lastY = t.clientY;
+      if (gesture.sampling) {
+        e.preventDefault();
+        queueMove(t.clientX, t.clientY, true);
+      } else if (Math.hypot(t.clientX - gesture.startX, t.clientY - gesture.startY) > SLOP) {
+        clearTimeout(gesture.timer);
+        gesture = null; // scroll gesture — the browser owns it now
+      }
+    };
+    const end = (e) => {
+      if (!gesture) return;
+      clearTimeout(gesture.timer);
+      const g = gesture;
+      gesture = null;
+      e.preventDefault(); // suppress the synthetic click either way
+      if (g.sampling) {
+        const disp = dispRef.current;
+        if (disp && statusRef.current === "ready") {
+          const rect = disp.getBoundingClientRect();
+          const fx = (g.lastX - rect.left) / rect.width;
+          const fy = (g.lastY - rect.top) / rect.height;
+          const x = Math.round(fx * disp.width), y = Math.round(fy * disp.height);
+          addPinRef.current({ fx, fy, hex: sampleAvg(x, y) });
+        }
+      } else {
+        setHint(true);
+        setTimeout(() => setHint(false), 1600);
+      }
+      setLoupe(null);
+    };
+    const cancel = () => {
+      if (gesture) clearTimeout(gesture.timer);
+      gesture = null;
+      setLoupe(null);
+    };
+    el.addEventListener("touchstart", start, { passive: true });
+    el.addEventListener("touchmove", move, { passive: false });
+    el.addEventListener("touchend", end, { passive: false });
+    el.addEventListener("touchcancel", cancel);
+    return () => {
+      el.removeEventListener("touchstart", start);
+      el.removeEventListener("touchmove", move);
+      el.removeEventListener("touchend", end);
+      el.removeEventListener("touchcancel", cancel);
+    };
+  }, [queueMove]);
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontSize: 11, color: T.faint, fontStyle: "italic" }}>
-          Click to drop a pin · click a pin to recall it
+          {COARSE ? "Touch and hold to sample · drag to inspect · lift to pin" : "Click to drop a pin · click a pin to recall it"}
           <Tip text={'Colour shows the picture as painted. Value strips hue. The step views posterise on equal L* bands: 3-step is a notan, 5-step a value plan, 9-step near the Munsell scale. Pins always sample the true colour.'} side="bottom" />
         </span>
         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
@@ -199,15 +282,31 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
             The image could not be loaded.
           </div>
         )}
-        <canvas ref={dispRef} onMouseMove={onMove} onMouseLeave={() => setLoupe(null)} onClick={onClick}
-          onTouchStart={onTouch} onTouchMove={onTouch} onTouchEnd={onTouchEnd}
-          style={{ width: "100%", display: status === "ready" ? "block" : "none", cursor: "crosshair", touchAction: "none" }} />
+        <canvas ref={dispRef}
+          onMouseMove={(e) => queueMove(e.clientX, e.clientY, false)}
+          onMouseLeave={() => setLoupe(null)} onClick={onClick}
+          style={{ width: "100%", display: status === "ready" ? "block" : "none", cursor: "crosshair", touchAction: "pan-y" }} />
+        {hint && (
+          <div style={{
+            position: "absolute", left: "50%", top: 12, transform: "translateX(-50%)",
+            background: "rgba(10,7,5,.88)", color: T.bone, fontSize: 12, padding: "8px 14px",
+            borderRadius: 4, zIndex: 5, pointerEvents: "none", whiteSpace: "nowrap",
+          }}>
+            Touch and hold to sample a colour
+          </div>
+        )}
         {status === "ready" && pins.map((p) => (
           <Pin key={p.id} pin={p} active={p.id === activePinId} onSelect={onSelectPin} />
         ))}
         {loupe && (
           <div style={{
-            position: "absolute", left: loupe.x + 22, top: loupe.y - 60, pointerEvents: "none",
+            /* Touch: centred above the finger. Mouse: offset right. Either
+               way clamped inside the wrapper so it can't be clipped by
+               overflow:hidden near the edges of the painting. */
+            position: "absolute",
+            left: Math.max(4, Math.min((loupe.w || 0) - 124, loupe.touch ? loupe.x - 60 : loupe.x + 22)),
+            top: Math.max(4, Math.min((loupe.h || 0) - 124, loupe.touch ? loupe.y - 158 : loupe.y - 60)),
+            pointerEvents: "none",
             width: 120, height: 120, borderRadius: "50%", overflow: "hidden", zIndex: 4,
             border: `4px solid ${loupe.hex}`, boxShadow: "0 4px 18px rgba(0,0,0,.7), 0 0 0 1px rgba(0,0,0,.8)",
           }}>

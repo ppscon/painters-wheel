@@ -5,10 +5,11 @@
    study, colour theory guidance, paint matching and mixing advice
    ================================================================ */
 
-import { Fragment, useState, useEffect, useCallback } from "react";
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { T } from "./components/ui.jsx";
 import { hexToRgb, rgbToLab } from "./color/math.js";
 import { labToMunsell } from "./color/munsell.js";
+import { nearestPaint } from "./color/paints.js";
 import { LESSONS } from "./data/lessons.js";
 import { ColorRecord } from "./components/ColorRecord.jsx";
 import { WheelView } from "./components/WheelView.jsx";
@@ -20,6 +21,40 @@ import { StudySheet } from "./components/StudySheet.jsx";
 import { HelpOverlay } from "./components/HelpOverlay.jsx";
 import { PW_STORE, PW_KEY, loadSaved, nextPinId } from "./state/persist.js";
 import { encodeStudy, decodeStudy } from "./state/share.js";
+
+/* Compact fixed readout for small screens, where the full colour record
+   sits below the painting: swatch, notation and nearest tube at a
+   glance, one tap to scroll to the record itself. Hidden ≥ 900px via
+   the .pw-mobile-readout media rule. */
+function MobileReadout({ hex, activeBox, recordRef }) {
+  const munsell = useMemo(() => labToMunsell(rgbToLab(...hexToRgb(hex))), [hex]);
+  const paint = useMemo(() => nearestPaint(hex, activeBox), [hex, activeBox]);
+  return (
+    <div className="pw-mobile-readout" style={{
+      position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 40,
+      alignItems: "center", gap: 12, padding: "10px 14px",
+      background: "rgba(27,21,18,.96)", borderTop: `1px solid ${T.line}`,
+      backdropFilter: "blur(6px)",
+    }}>
+      <span style={{ width: 42, height: 42, borderRadius: 5, background: hex, border: "1px solid rgba(0,0,0,.5)", flexShrink: 0 }} />
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div className="mono" style={{ fontSize: 12, color: T.bone }}>{hex} · {munsell}</div>
+        <div style={{ fontSize: 11, color: T.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {paint ? `${paint.n} · ${paint.m} · ΔE ${paint.dE.toFixed(1)}` : ""}
+        </div>
+      </div>
+      <button
+        onClick={() => recordRef.current && recordRef.current.scrollIntoView({ behavior: "smooth", block: "start" })}
+        style={{
+          padding: "10px 14px", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase",
+          background: "transparent", color: T.ochre, border: `1px solid ${T.ochre}`,
+          borderRadius: 4, cursor: "pointer", fontFamily: "inherit", flexShrink: 0,
+        }}>
+        Record
+      </button>
+    </div>
+  );
+}
 
 /* ---------------- App -------------------------------------------- */
 export default function App() {
@@ -45,13 +80,7 @@ export default function App() {
   const [uploadSource, setUploadSource] = useState(null);
   const [uploadName, setUploadName] = useState(null);
 
-  useEffect(() => {
-    const l = document.createElement("link");
-    l.rel = "stylesheet";
-    l.href = "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Mono:wght@400;500&display=swap";
-    document.head.appendChild(l);
-    return () => l.remove();
-  }, []);
+  const recordRef = useRef(null);
 
   useEffect(() => {
     if (!PW_STORE) return;
@@ -206,7 +235,9 @@ export default function App() {
         .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
         button:focus-visible, label:focus-visible { outline: 2px solid ${T.ochre}; outline-offset: 2px; }
         @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
-        @media (max-width: 900px) { .pw-main { grid-template-columns: 1fr !important; } }
+        @media (max-width: 900px) { .pw-main { grid-template-columns: 1fr !important; padding-bottom: 86px !important; } }
+        .pw-mobile-readout { display: none; }
+        @media (max-width: 900px) { .pw-mobile-readout { display: flex; } }
         @media print {
           body { background: #FBF7EE !important; }
           header, .pw-main, .pw-help-overlay { display: none !important; }
@@ -283,7 +314,7 @@ export default function App() {
         </section>
 
         <aside>
-          <div style={{ background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, padding: 18 }}>
+          <div ref={recordRef} style={{ background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, padding: 18 }}>
             <div style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", color: T.ochre, marginBottom: 12 }}>
               Colour record
             </div>
@@ -431,6 +462,7 @@ export default function App() {
           </p>
         </aside>
       </main>
+      {activeHex && tab !== "box" && <MobileReadout hex={activeHex} activeBox={activeBox} recordRef={recordRef} />}
       {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
       {sheetOpen && sheetImage && ctxPins.length > 0 && (
         <StudySheet title={sheetTitle} subtitle={sheetSubtitle} image={sheetImage}
