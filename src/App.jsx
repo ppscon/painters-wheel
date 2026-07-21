@@ -18,7 +18,7 @@ import { ZornView } from "./components/ZornView.jsx";
 import { PaintboxView } from "./components/PaintboxView.jsx";
 import { StudySheet } from "./components/StudySheet.jsx";
 import { HelpOverlay } from "./components/HelpOverlay.jsx";
-import { PW_STORE, PW_KEY, PW_INIT_PINS, PW_INIT_BOX, PW_INIT_BOXONLY, nextPinId } from "./state/persist.js";
+import { PW_STORE, PW_KEY, PW_SAVED, PW_INIT_PINS, PW_INIT_BOX, PW_INIT_BOXONLY, nextPinId } from "./state/persist.js";
 
 /* ---------------- App -------------------------------------------- */
 export default function App() {

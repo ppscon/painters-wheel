@@ -22,4 +22,4 @@ let PIN_SEQ = 1;
 for (const k in PW_INIT_PINS) for (const p of PW_INIT_PINS[k]) if (p.id >= PIN_SEQ) PIN_SEQ = p.id + 1;
 function nextPinId() { return PIN_SEQ++; }
 
-export { PW_STORE, PW_KEY, PW_INIT_PINS, PW_INIT_BOX, PW_INIT_BOXONLY, nextPinId };
+export { PW_STORE, PW_KEY, PW_SAVED, PW_INIT_PINS, PW_INIT_BOX, PW_INIT_BOXONLY, nextPinId };
