@@ -18,7 +18,8 @@ import { ZornView } from "./components/ZornView.jsx";
 import { PaintboxView } from "./components/PaintboxView.jsx";
 import { StudySheet } from "./components/StudySheet.jsx";
 import { HelpOverlay } from "./components/HelpOverlay.jsx";
-import { PW_STORE, PW_KEY, PW_SAVED, PW_INIT_PINS, PW_INIT_BOX, PW_INIT_BOXONLY, nextPinId } from "./state/persist.js";
+import { PW_STORE, PW_KEY, loadSaved, nextPinId } from "./state/persist.js";
+import { encodeStudy, decodeStudy } from "./state/share.js";
 
 /* ---------------- App -------------------------------------------- */
 export default function App() {
@@ -27,12 +28,13 @@ export default function App() {
   const [wheelHex, setWheelHex] = useState(null);
   const [clusterHex, setClusterHex] = useState(null);
   const [zornHex, setZornHex] = useState(null);
-  const [pins, setPins] = useState(PW_INIT_PINS);
+  const [saved] = useState(loadSaved);
+  const [pins, setPins] = useState(saved.pins);
   const [activePin, setActivePin] = useState(null);
-  const [palette, setPalette] = useState((PW_SAVED && PW_SAVED.palette) || []);
+  const [palette, setPalette] = useState(saved.palette);
   const [viewHex, setViewHex] = useState(null);
-  const [box, setBox] = useState(PW_INIT_BOX);
-  const [boxOnly, setBoxOnly] = useState(PW_INIT_BOXONLY);
+  const [box, setBox] = useState(saved.box);
+  const [boxOnly, setBoxOnly] = useState(saved.boxOnly);
   const activeBox = boxOnly && box.size >= 2 ? box : null;
   const [helpOpen, setHelpOpen] = useState(false);
   const [pinHistory, setPinHistory] = useState([]);
@@ -64,13 +66,12 @@ export default function App() {
     activePin && activePin.ctx === ctxKey ? ctxPins.find((p) => p.id === activePin.id) : null;
 
   const addPin = (key) => ({ fx, fy, hex }) => {
-    setPins((prev) => {
-      const num = prev[key].length ? Math.max(...prev[key].map((p) => p.num)) + 1 : 1;
-      const pin = { id: nextPinId(), num, fx, fy, hex };
-      setPinHistory((h) => [...h.slice(-19), { type: "add", key, pin }]);
-      setActivePin({ ctx: key, id: pin.id });
-      return { ...prev, [key]: [...prev[key], pin] };
-    });
+    const list = pins[key] || [];
+    const num = list.length ? Math.max(...list.map((p) => p.num)) + 1 : 1;
+    const pin = { id: nextPinId(), num, fx, fy, hex };
+    setPins({ ...pins, [key]: [...list, pin] });
+    setPinHistory((h) => [...h.slice(-19), { type: "add", key, pin }]);
+    setActivePin({ ctx: key, id: pin.id });
     setViewHex(null);
     setClusterHex(null);
   };
@@ -80,11 +81,10 @@ export default function App() {
     setClusterHex(null);
   };
   const deletePin = (key, id) => {
-    setPins((prev) => {
-      const pin = prev[key].find((p) => p.id === id);
-      if (pin) setPinHistory((h) => [...h.slice(-19), { type: "del", key, pin }]);
-      return { ...prev, [key]: prev[key].filter((p) => p.id !== id) };
-    });
+    const pin = (pins[key] || []).find((p) => p.id === id);
+    if (!pin) return;
+    setPins({ ...pins, [key]: pins[key].filter((p) => p.id !== id) });
+    setPinHistory((h) => [...h.slice(-19), { type: "del", key, pin }]);
     setActivePin((ap) => (ap && ap.ctx === key && ap.id === id ? null : ap));
   };
   const clearUploadPins = useCallback(() => {
@@ -105,19 +105,17 @@ export default function App() {
 
 
   const undoPin = useCallback(() => {
-    setPinHistory((h) => {
-      if (!h.length) return h;
-      const op = h[h.length - 1];
-      setPins((prev) => {
-        const list = prev[op.key] || [];
-        return op.type === "add"
-          ? { ...prev, [op.key]: list.filter((p) => p.id !== op.pin.id) }
-          : { ...prev, [op.key]: [...list, op.pin].sort((a, b) => a.num - b.num) };
-      });
-      setActivePin((ap) => (op.type === "add" && ap && ap.id === op.pin.id ? null : ap));
-      return h.slice(0, -1);
+    if (!pinHistory.length) return;
+    const op = pinHistory[pinHistory.length - 1];
+    setPinHistory(pinHistory.slice(0, -1));
+    setPins((prev) => {
+      const list = prev[op.key] || [];
+      return op.type === "add"
+        ? { ...prev, [op.key]: list.filter((p) => p.id !== op.pin.id) }
+        : { ...prev, [op.key]: [...list, op.pin].sort((a, b) => a.num - b.num) };
     });
-  }, []);
+    setActivePin((ap) => (op.type === "add" && ap && ap.id === op.pin.id ? null : ap));
+  }, [pinHistory]);
   useEffect(() => {
     const onKey = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !/INPUT|TEXTAREA/.test(e.target.tagName)) {
@@ -142,10 +140,7 @@ export default function App() {
   };
   const shareStudy = () => {
     if (tab !== "lessons" || !ctxPins.length) return;
-    const enc = ctxPins.map((p) =>
-      [p.num, p.fx.toFixed(4), p.fy.toFixed(4), p.hex.slice(1), encodeURIComponent(p.label || "")].join(",")
-    ).join("~");
-    const url = `${location.origin}${location.pathname}#s=${lessonId}.${enc}`;
+    const url = `${location.origin}${location.pathname}${encodeStudy(lessonId, ctxPins)}`;
     const done = () => { setShareMsg("Copied!"); setTimeout(() => setShareMsg(null), 2200); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(url).then(done).catch(() => window.prompt("Copy this study link:", url));
@@ -154,23 +149,13 @@ export default function App() {
     }
   };
   useEffect(() => {
-    const m = location.hash.match(/^#s=([a-z]+)\.(.+)$/);
-    if (!m || !LESSONS.some((l) => l.id === m[1])) return;
-    try {
-      const incoming = m[2].split("~").map((s) => {
-        const [num, fx, fy, hx, label] = s.split(",");
-        return {
-          id: nextPinId(), num: Number(num), fx: Number(fx), fy: Number(fy),
-          hex: "#" + String(hx).toUpperCase(),
-          label: decodeURIComponent(label || "") || undefined,
-        };
-      }).filter((p) => p.num > 0 && p.fx >= 0 && p.fx <= 1 && p.fy >= 0 && p.fy <= 1 && /^#[0-9A-F]{6}$/.test(p.hex));
-      if (!incoming.length) return;
-      setTab("lessons");
-      setLessonId(m[1]);
-      setPins((prev) => ({ ...prev, [m[1]]: incoming }));
-      history.replaceState(null, "", location.pathname);
-    } catch (e) { /* malformed share link; ignore */ }
+    const study = decodeStudy(location.hash, LESSONS.map((l) => l.id));
+    if (!study) return;
+    const incoming = study.pins.map((p) => ({ ...p, id: nextPinId() }));
+    setTab("lessons");
+    setLessonId(study.lessonId);
+    setPins((prev) => ({ ...prev, [study.lessonId]: incoming }));
+    history.replaceState(null, "", location.pathname);
   }, []);
   const exportPalettePng = () => {
     const w = 96, h = 132, c = document.createElement("canvas");

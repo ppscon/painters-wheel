@@ -35,6 +35,22 @@ export class ErrorBoundary extends Component {
             }}>
               Reload
             </button>
+            <button
+              onClick={() => {
+                try { window.localStorage.removeItem("painters-wheel-v1"); } catch (e) { /* ignore */ }
+                window.location.reload();
+              }}
+              style={{
+                marginTop: 14, marginLeft: 10, padding: "10px 22px", background: "transparent",
+                color: "#9C8F78", border: "1px solid #4A4030", borderRadius: 4, cursor: "pointer",
+                fontSize: 12, letterSpacing: 2, textTransform: "uppercase", fontFamily: "inherit",
+              }}>
+              Reset saved data
+            </button>
+            <p style={{ color: "#6E6350", fontSize: 11, marginTop: 10 }}>
+              If reloading doesn't help, resetting clears saved pins and palette — a corrupted save
+              can otherwise keep the error coming back.
+            </p>
           </div>
         </div>
       );
