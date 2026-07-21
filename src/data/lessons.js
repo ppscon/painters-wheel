@@ -1,8 +1,8 @@
 /* ---------------- Lesson paintings ------------------------------- */
-const IMG_URL = "/lessons/contrast.jpg";
-const IMG_VALUE = "/lessons/value.jpg";
-const IMG_HUE = "/lessons/hue.jpg";
-const IMG_CHROMA = "/lessons/chroma.jpg";
+const IMG_URL = "/lessons/contrast.webp";
+const IMG_VALUE = "/lessons/value.webp";
+const IMG_HUE = "/lessons/hue.webp";
+const IMG_CHROMA = "/lessons/chroma.webp";
 
 const LESSONS = [
   {
