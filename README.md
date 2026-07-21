@@ -2,6 +2,10 @@
 
 Interactive colour theory for oil painters. Four lesson paintings (contrast, value, hue, chroma) with pin-based colour sampling, Munsell notation interpolated from the real renotation dataset, oil paint matching across five manufacturers (Winsor & Newton, Michael Harding, Old Holland, Gamblin, Rembrandt), two-paint mixing recommendations, automatic palette extraction for uploaded images, and a dynamic RYB colour wheel with a live mixing lab (hue nudging along the wheel, chroma cancellation toward the complement, tint and shade with a black-versus-complement comparison). Pins and the saved palette persist per browser via localStorage, and the sampling canvas supports touch (drag to inspect, release to pin). A dedicated Zorn Palette tab covers the four-tube portrait method. Value view posterises on equal L* bands (3, 5 or 9 steps) for notan studies, and every image gets a luminosity histogram with shadow, mid and light zone masses. Contextual tooltips explain Munsell notation, ΔE scores and mixing behaviour in place, and a help overlay (the ? in the header) covers every tab plus a glossary. All paint mixing uses a Kubelka-Munk subtractive model on reconstructed reflectance spectra, so mixes behave like pigment rather than light.
 
+## Architecture
+
+Modular source under `src/`: `color/` (math, Munsell renotation, Kubelka-Munk, RYB theory, paint database), `data/` (lessons, Zorn), `components/`, `state/`. An 18-test Vitest suite (`npm test`) locks CIEDE2000 to the Sharma reference pairs, round-trips the renotation data, verifies KM pigment behaviours, paintbox pooling and the posterise LUTs; GitHub Actions runs tests and build on every push. An error boundary guards the whole app.
+
 ## Stack
 
 React 18 + Vite. No backend; all colour analysis (CIELAB, CIEDE2000, k-means palette extraction) runs in the browser. Uploaded images never leave the client.
