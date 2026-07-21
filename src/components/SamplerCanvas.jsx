@@ -109,7 +109,17 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
       setHist(computeLuminosityHist(src));
       if (extract && onPalette) onPalette(extractPalette(src));
     };
-    img.onerror = () => { if (!cancelled) setStatus("error"); };
+    let triedFallback = false;
+    img.onerror = () => {
+      if (cancelled) return;
+      // Browsers without WebP (older Safari/iPads) fall back to the JPEG.
+      if (!triedFallback && /\.webp$/.test(img.src)) {
+        triedFallback = true;
+        img.src = source.url.replace(/\.webp$/, ".jpg");
+        return;
+      }
+      setStatus("error");
+    };
     img.src = source.url;
     return () => { cancelled = true; img.onload = img.onerror = null; };
   }, [source, draw, extract, onPalette]);
