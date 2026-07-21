@@ -1,15 +1,12 @@
-import { useState, useCallback } from "react";
 import { T } from "./ui.jsx";
 import { SamplerCanvas } from "./SamplerCanvas.jsx";
 /* ---------------- Your canvas (upload + analysis) view ------------ */
-function UploadView({ pins, activePinId, onAddPin, onSelectPin, onDeletePin, onNewImage, setSampled, source, setSource, fileName, setFileName, onPaletteSheet }) {
-  const [autoPalette, setAutoPalette] = useState([]);
-  const onPalette = useCallback((p) => setAutoPalette(p), []);
+function UploadView({ pins, activePinId, onAddPin, onSelectPin, onDeletePin, onNewImage, setSampled, source, setSource, fileName, setFileName, onPaletteSheet, autoPalette, onPalette }) {
   const onFile = (e) => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
     setFileName(f.name);
-    setAutoPalette([]);
+    onPalette([]);
     onNewImage();
     const reader = new FileReader();
     reader.onload = () => setSource({ url: reader.result, crossOrigin: false });

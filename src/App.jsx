@@ -17,6 +17,7 @@ import { LessonsView } from "./components/LessonsView.jsx";
 import { UploadView } from "./components/UploadView.jsx";
 import { ZornView } from "./components/ZornView.jsx";
 import { PaintboxView } from "./components/PaintboxView.jsx";
+import { ShoppingListView } from "./components/ShoppingListView.jsx";
 import { StudySheet } from "./components/StudySheet.jsx";
 import { HelpOverlay } from "./components/HelpOverlay.jsx";
 import { PW_STORE, PW_KEY, loadSaved, nextPinId } from "./state/persist.js";
@@ -80,6 +81,8 @@ export default function App() {
   const [paletteSheet, setPaletteSheet] = useState(null);
   const [uploadSource, setUploadSource] = useState(null);
   const [uploadName, setUploadName] = useState(null);
+  const [uploadPalette, setUploadPalette] = useState([]);
+  const onUploadPalette = useCallback((p) => setUploadPalette(p), []);
 
   const recordRef = useRef(null);
 
@@ -230,6 +233,7 @@ export default function App() {
     ["wheel", "Colour Wheel"],
     ["zorn", "Zorn Palette"],
     ["box", "Paintbox"],
+    ["shop", "Shopping List"],
   ];
 
   return (
@@ -316,10 +320,14 @@ export default function App() {
               source={uploadSource} setSource={setUploadSource}
               fileName={uploadName} setFileName={setUploadName}
               setSampled={(h) => { setClusterHex(h); setActivePin(null); setViewHex(null); }}
-              onPaletteSheet={setPaletteSheet} />
+              onPaletteSheet={setPaletteSheet}
+              autoPalette={uploadPalette} onPalette={onUploadPalette} />
           )}
           {tab === "zorn" && (
             <ZornView activeBox={activeBox} setSampled={(h) => { setZornHex(h); setViewHex(null); setActivePin(null); }} />
+          )}
+          {tab === "shop" && (
+            <ShoppingListView clusters={uploadPalette} uploadPins={pins.upload} box={box} uploadName={uploadName} />
           )}
           {tab === "box" && (
             <PaintboxView box={box} setBox={setBox} boxOnly={boxOnly} setBoxOnly={setBoxOnly} />
@@ -507,7 +515,7 @@ export default function App() {
           </p>
         </aside>
       </main>
-      {activeHex && tab !== "box" && <MobileReadout hex={activeHex} activeBox={activeBox} recordRef={recordRef} />}
+      {activeHex && tab !== "box" && tab !== "shop" && <MobileReadout hex={activeHex} activeBox={activeBox} recordRef={recordRef} />}
       {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
       {sheetOpen && sheetImage && ctxPins.length > 0 && (
         <StudySheet title={sheetTitle} subtitle={sheetSubtitle} image={sheetImage}
