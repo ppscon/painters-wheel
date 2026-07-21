@@ -117,7 +117,11 @@ function WheelView({ selected, setSelected, activeBox, munsellJump }) {
     return mixMulti(parts);
   }, [selIdx, compIdx, leftIdx, rightIdx, nudge, neutral, valAdj, darkWith, base]);
 
-  useEffect(() => { if (working) setSelected(working); }, [working, setSelected]);
+  /* Depend on the value only: setSelected is an inline prop that changes
+     identity every App render, and re-firing on it clobbers selections
+     made elsewhere (saved-palette preview, Munsell chip clicks). */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (working) setSelected(working); }, [working]);
 
   const lab = working ? rgbToLab(...hexToRgb(working)) : null;
   const chroma = lab ? Math.hypot(lab[1], lab[2]) : 0;

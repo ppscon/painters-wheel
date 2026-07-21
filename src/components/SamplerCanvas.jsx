@@ -85,9 +85,11 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
   useEffect(() => {
     setStatus("loading");
     setHist(null);
+    let cancelled = false;
     const img = new Image();
     if (source.crossOrigin) img.crossOrigin = "anonymous";
     img.onload = () => {
+      if (cancelled || !dispRef.current) return;
       const cap = 2400;
       const scale = Math.min(1, cap / Math.max(img.naturalWidth, img.naturalHeight));
       const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
@@ -103,8 +105,9 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
       setHist(computeLuminosityHist(src));
       if (extract && onPalette) onPalette(extractPalette(src));
     };
-    img.onerror = () => setStatus("error");
+    img.onerror = () => { if (!cancelled) setStatus("error"); };
     img.src = source.url;
+    return () => { cancelled = true; img.onload = img.onerror = null; };
   }, [source, draw, extract, onPalette]);
 
   useEffect(() => { if (status === "ready") draw(view); }, [view, status, draw]);
