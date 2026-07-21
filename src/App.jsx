@@ -8,7 +8,7 @@
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { T } from "./components/ui.jsx";
 import { hexToRgb, rgbToLab } from "./color/math.js";
-import { labToMunsell } from "./color/munsell.js";
+import { labToMunsell, munsellPageIndex } from "./color/munsell.js";
 import { nearestPaint } from "./color/paints.js";
 import { LESSONS } from "./data/lessons.js";
 import { ColorRecord } from "./components/ColorRecord.jsx";
@@ -194,14 +194,11 @@ export default function App() {
   const setPinLabel = (key, id, label) =>
     setPins((prev) => ({ ...prev, [key]: prev[key].map((p) => (p.id === id ? { ...p, label: label || undefined } : p)) }));
   const openMunsellPage = (notation) => {
-    const m = String(notation).match(/^([\d.]+)([A-Z]+)/);
-    if (!m) return;
-    const famIdx = ["R","YR","Y","GY","G","BG","B","PB","P","RP"].indexOf(m[2]);
-    if (famIdx < 0) return;
-    const step = Math.min(3, Math.max(0, Math.round(Number(m[1]) / 2.5) - 1));
+    const idx = munsellPageIndex(notation);
+    if (idx == null) return;
     setTab("wheel");
     setViewHex(null);
-    setMunsellJump({ idx: famIdx * 4 + step, t: Date.now() });
+    setMunsellJump({ idx, t: Date.now() });
   };
   const shareStudy = () => {
     if (tab !== "lessons" || !ctxPins.length) return;

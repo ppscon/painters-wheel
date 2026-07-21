@@ -28,3 +28,24 @@ describe("renotation lookup", () => {
     expect(FAMILIES).toHaveLength(10);
   });
 });
+
+import { munsellPageIndex, MUNSELL_HUE_NAMES } from "../src/color/munsell.js";
+
+describe("munsellPageIndex", () => {
+  it("maps in-family notations to their page", () => {
+    expect(MUNSELL_HUE_NAMES[munsellPageIndex("2.5R 5/10")]).toBe("2.5R");
+    expect(MUNSELL_HUE_NAMES[munsellPageIndex("5Y 8/12")]).toBe("5Y");
+    expect(MUNSELL_HUE_NAMES[munsellPageIndex("10RP 4/8")]).toBe("10RP");
+    expect(MUNSELL_HUE_NAMES[munsellPageIndex("7.5PB 3/6")]).toBe("7.5PB");
+  });
+  it("wraps family boundaries to the nearest page", () => {
+    expect(MUNSELL_HUE_NAMES[munsellPageIndex("0.5R 5/10")]).toBe("10RP");
+    expect(MUNSELL_HUE_NAMES[munsellPageIndex("0.5YR 5/10")]).toBe("10R");
+    expect(MUNSELL_HUE_NAMES[munsellPageIndex("1.25R 5/10")]).toBe("2.5R");
+  });
+  it("rejects malformed notations", () => {
+    expect(munsellPageIndex("N 5.0")).toBeNull();
+    expect(munsellPageIndex("")).toBeNull();
+    expect(munsellPageIndex("5.0Q 1/1")).toBeNull();
+  });
+});

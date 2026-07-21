@@ -71,11 +71,29 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, onDel
     const src = srcRef.current, disp = dispRef.current;
     if (!src || !disp) return;
     const ctx = disp.getContext("2d");
-    ctx.filter = mode === "colour" ? "none" : "grayscale(1)";
-    ctx.drawImage(src, 0, 0);
-    ctx.filter = "none";
+    const grey = mode !== "colour";
+    /* Browsers without 2D-canvas filter support (Safari < 17.6) expose
+       ctx.filter as undefined and silently ignore assignments — without
+       the fallback below, value views would posterise the red channel. */
+    const filterOK = typeof ctx.filter === "string";
+    if (grey && filterOK) {
+      ctx.filter = "grayscale(1)";
+      ctx.drawImage(src, 0, 0);
+      ctx.filter = "none";
+    } else {
+      ctx.drawImage(src, 0, 0);
+    }
     const n = POSTER_STEPS[mode];
-    if (n) {
+    if (grey && !filterOK) {
+      const img = ctx.getImageData(0, 0, disp.width, disp.height);
+      const d = img.data, lut = n ? posterLUT(n) : null;
+      for (let i = 0; i < d.length; i += 4) {
+        let g = Math.round(0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]);
+        if (lut) g = lut[g];
+        d[i] = g; d[i + 1] = g; d[i + 2] = g;
+      }
+      ctx.putImageData(img, 0, 0);
+    } else if (n) {
       const img = ctx.getImageData(0, 0, disp.width, disp.height);
       const d = img.data, lut = posterLUT(n);
       for (let i = 0; i < d.length; i += 4) {

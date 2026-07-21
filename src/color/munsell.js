@@ -12,6 +12,18 @@ const MUNSELL_HUE_NAMES = (() => {
   return out;
 })();
 const MUNSELL_N = MUNSELL_POINTS.length / 6;
+
+/* Nearest renotation hue page for a notation like "7.5R 5.2/14".
+   Computed on the full 100-step hue circle rather than clamped within
+   the named family, so e.g. 0.5R correctly opens 10RP (its nearest
+   page) instead of 2.5R. */
+function munsellPageIndex(notation) {
+  const m = String(notation).match(/^([\d.]+)([A-Z]+)/);
+  if (!m) return null;
+  const famIdx = FAMILIES.indexOf(m[2]);
+  if (famIdx < 0) return null;
+  return (Math.round((famIdx * 10 + Number(m[1])) / 2.5) - 1 + 40) % 40;
+}
 function labToY(L) {
   const fy = (L + 16) / 116;
   const d = 6 / 29;
@@ -78,4 +90,4 @@ const MUNSELL_BY_HUE = (() => {
   return by;
 })();
 
-export { FAMILIES, MUNSELL_HUE_NAMES, MUNSELL_N, labToY, munsellValueFromY, labToMunsell, MUNSELL_BY_HUE };
+export { FAMILIES, MUNSELL_HUE_NAMES, MUNSELL_N, labToY, munsellValueFromY, labToMunsell, MUNSELL_BY_HUE, munsellPageIndex };
