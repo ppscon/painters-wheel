@@ -30,3 +30,20 @@ describe("computeRecord", () => {
     for (const p of PAINTS) expect(p.x).toMatch(/^#[0-9A-F]{6}$/);
   });
 });
+
+import { classifyGamut } from "../src/color/paints.js";
+
+describe("classifyGamut", () => {
+  it("classifies an exact tube colour as tube", () => {
+    const g = classifyGamut("#F4F1E9", null); // Titanium White's own hex
+    expect(g.kind).toBe("tube");
+    expect(g.dE).toBeLessThan(1);
+  });
+  it("always returns a valid kind with a finite dE", () => {
+    for (const hex of ["#00FF00", "#FF00FF", "#123456", "#808080"]) {
+      const g = classifyGamut(hex, null);
+      expect(["tube", "mix", "out"]).toContain(g.kind);
+      expect(Number.isFinite(g.dE)).toBe(true);
+    }
+  });
+});

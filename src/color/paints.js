@@ -124,6 +124,19 @@ function nearestPaint(hex, activeBox) {
   return best;
 }
 
+/* Gamut classification for the Munsell explorer: can the palette reach
+   this chip straight from a tube (dE < 6), with a two-paint mix, or
+   not at all? dE 6 is the record panel's "close, adjust slightly"
+   boundary — beyond it a painter would call the chip out of reach. */
+function classifyGamut(hex, activeBox) {
+  const lab = rgbToLab(...hexToRgb(hex));
+  const all = paintPool(activeBox).map((pt) => ({ ...pt, dE: deltaE2000(lab, pt.lab) })).sort((a, b) => a.dE - b.dE);
+  if (all[0].dE < 6) return { kind: "tube", paint: all[0], dE: all[0].dE };
+  const mix = all.length >= 2 ? bestMixFor(lab, all, activeBox) : null;
+  if (mix && mix.dE < 6) return { kind: "mix", mix, dE: mix.dE };
+  return { kind: "out", dE: Math.min(all[0].dE, mix ? mix.dE : Infinity) };
+}
+
 function computeRecord(hex, activeBox) {
   const rgb = hexToRgb(hex);
   const lab = rgbToLab(...rgb);
@@ -135,4 +148,4 @@ function computeRecord(hex, activeBox) {
   return { hex, rgb, lab, munsell, matches, mix, theory };
 }
 
-export { PAINTS, PAINT_LABS, MIXERS, bestMixFor, paintPool, nearestPaint, computeRecord };
+export { PAINTS, PAINT_LABS, MIXERS, bestMixFor, paintPool, nearestPaint, computeRecord, classifyGamut };

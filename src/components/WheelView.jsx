@@ -4,12 +4,25 @@ import { hexToRgb, rgbToLab, labToRgbHex } from "../color/math.js";
 import { MUNSELL_HUE_NAMES, MUNSELL_BY_HUE, labToMunsell } from "../color/munsell.js";
 import { mixMulti } from "../color/km.js";
 import { RYB, HARMONIES } from "../color/ryb.js";
-import { nearestPaint } from "../color/paints.js";
+import { nearestPaint, classifyGamut } from "../color/paints.js";
 import { ZHEX } from "../data/zorn.js";
-function MunsellExplorer({ onPick, jump }) {
+function MunsellExplorer({ onPick, jump, activeBox }) {
   const [hueIdx, setHueIdx] = useState(29);
+  const [showGamut, setShowGamut] = useState(false);
   useEffect(() => { if (jump) setHueIdx(jump.idx); }, [jump]);
   const pts = MUNSELL_BY_HUE[hueIdx].filter((p) => p.v >= 1);
+  /* Reachability of every chip on this page for the working palette:
+     computed only while the overlay is on, memoised per page + box. */
+  const gamut = useMemo(() => {
+    if (!showGamut) return null;
+    const m = {};
+    for (const p of pts) {
+      const { hex } = labToRgbHex(p.L, p.a, p.b);
+      m[`${p.v}_${p.c}`] = classifyGamut(hex, activeBox);
+    }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showGamut, hueIdx, activeBox]);
   const values = [...new Set(pts.map((p) => p.v))].sort((x, y) => y - x);
   const maxC = pts.reduce((m, p) => Math.max(m, p.c), 2);
   const chromas = [];
@@ -34,6 +47,29 @@ function MunsellExplorer({ onPick, jump }) {
           {MUNSELL_HUE_NAMES[hueIdx]}
         </span>
       </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+        <button onClick={() => setShowGamut((s) => !s)} aria-pressed={showGamut} style={{
+          padding: "6px 12px", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase",
+          background: showGamut ? T.ochre : "transparent",
+          color: showGamut ? T.ground : T.muted,
+          border: `1px solid ${showGamut ? T.ochre : T.line}`,
+          borderRadius: 3, cursor: "pointer", fontFamily: "inherit",
+        }}>
+          Paint gamut overlay
+        </button>
+        <Tip text={`Marks what ${activeBox ? "your paintbox" : "the full paint range"} can reach on this page: full-strength chips come straight from a tube (ΔE under 6), chips with a small ring need a two-paint mix, and dimmed chips are beyond the pigments — usually the high-chroma edge. Restrict matching in Paintbox to see your own gamut.`} side="bottom" />
+        {showGamut && (
+          <span style={{ fontSize: 10, color: T.faint, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span>tube · plain chip</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              mix
+              <span style={{ width: 7, height: 7, borderRadius: "50%", border: `1.5px solid ${T.muted}`, display: "inline-block" }} />
+            </span>
+            <span style={{ opacity: 0.4 }}>out of reach · dimmed</span>
+            <span style={{ color: T.ochre }}>{activeBox ? "your paintbox" : "full range"}</span>
+          </span>
+        )}
+      </div>
       <div style={{ overflowX: "auto" }}>
         <div style={{
           display: "grid",
@@ -53,13 +89,31 @@ function MunsellExplorer({ onPick, jump }) {
                 const p = byVC[`${v}_${c}`];
                 if (!p) return <div key={c} />;
                 const { hex, clipped } = labToRgbHex(p.L, p.a, p.b);
+                const g = gamut && gamut[`${v}_${c}`];
+                const gLabel = !g ? "" :
+                  g.kind === "tube" ? ` — straight from ${g.paint.n} (ΔE ${g.dE.toFixed(1)})` :
+                  g.kind === "mix" ? ` — mix ${g.mix.a.n} + ${g.mix.b.n} ${g.mix.ratio} (ΔE ${g.dE.toFixed(1)})` :
+                  ` — out of reach (best ΔE ${g.dE.toFixed(1)})`;
                 return (
                   <button key={c} onClick={() => onPick(hex)}
-                    title={`${MUNSELL_HUE_NAMES[hueIdx]} ${v}/${c}${clipped ? " (outside sRGB, clamped)" : ""}`}
+                    title={`${MUNSELL_HUE_NAMES[hueIdx]} ${v}/${c}${clipped ? " (outside sRGB, clamped)" : ""}${gLabel}`}
+                    aria-label={`${MUNSELL_HUE_NAMES[hueIdx]} value ${v} chroma ${c}${gLabel}`}
                     style={{
                       height: 26, background: hex, cursor: "pointer", padding: 0, borderRadius: 2,
                       border: clipped ? `1px dashed ${T.faint}` : `1px solid ${T.line}`,
-                    }} />
+                      position: "relative",
+                      opacity: g && g.kind === "out" ? 0.28 : 1,
+                      transition: "opacity .2s",
+                    }}>
+                    {g && g.kind === "mix" && (
+                      <span style={{
+                        position: "absolute", right: 2, bottom: 2, width: 7, height: 7,
+                        borderRadius: "50%", background: "transparent",
+                        border: `1.5px solid ${p.v >= 6 ? "rgba(20,15,10,.85)" : "rgba(245,240,228,.9)"}`,
+                        pointerEvents: "none",
+                      }} />
+                    )}
+                  </button>
                 );
               })}
             </React.Fragment>
@@ -176,7 +230,7 @@ function WheelView({ selected, setSelected, activeBox, munsellJump }) {
         ))}
       </div>
       {mode === "munsell" ? (
-        <MunsellExplorer onPick={(h) => setSelected(h)} jump={munsellJump} />
+        <MunsellExplorer onPick={(h) => setSelected(h)} jump={munsellJump} activeBox={activeBox} />
       ) : (
       <>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
