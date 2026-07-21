@@ -79,7 +79,7 @@ function UploadView({ pins, activePinId, onAddPin, onSelectPin, onDeletePin, onN
               {onPaletteSheet && (
                 <button
                   onClick={() => onPaletteSheet(autoPalette.map((c, i) => ({
-                    id: 100000 + i, num: i + 1, hex: c.hex,
+                    id: 100000 + i, num: i + 1, hex: c.hex, fx: c.fx, fy: c.fy,
                     label: `${c.pct.toFixed(0)}% of the surface`,
                   })))}
                   style={{

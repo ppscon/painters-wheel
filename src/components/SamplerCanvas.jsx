@@ -439,12 +439,28 @@ function extractPalette(srcCanvas, k = 8) {
     cents = sums.map((s, ci) => (s[3] ? [s[0] / s[3], s[1] / s[3], s[2] / s[3]] : cents[ci]));
   }
   const acc = Array.from({ length: k }, () => [0, 0, 0, 0]);
+  /* Track, per cluster, the actual pixel nearest the final centroid so
+     each extracted colour carries a real location in the image. */
+  const best = Array.from({ length: k }, () => ({ d: Infinity, p: -1 }));
   for (let p = 0; p < pts.length; p++) {
-    const a = acc[assign[p]];
+    const ci = assign[p];
+    const a = acc[ci];
     a[0] += pts[p].rgb[0]; a[1] += pts[p].rgb[1]; a[2] += pts[p].rgb[2]; a[3]++;
+    const [L, A, B] = cents[ci], [l, a2, b2] = pts[p].lab;
+    const dd = (L - l) ** 2 + (A - a2) ** 2 + (B - b2) ** 2;
+    if (dd < best[ci].d) best[ci] = { d: dd, p };
   }
   return acc
-    .map((a) => (a[3] ? { hex: rgbToHex(a[0] / a[3], a[1] / a[3], a[2] / a[3]), pct: (a[3] / pts.length) * 100 } : null))
+    .map((a, ci) => {
+      if (!a[3]) return null;
+      const bp = best[ci].p;
+      return {
+        hex: rgbToHex(a[0] / a[3], a[1] / a[3], a[2] / a[3]),
+        pct: (a[3] / pts.length) * 100,
+        fx: ((bp % w) + 0.5) / w,
+        fy: (Math.floor(bp / w) + 0.5) / h,
+      };
+    })
     .filter((x) => x && x.pct >= 1)
     .sort((a, b) => b.pct - a.pct);
 }
