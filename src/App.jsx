@@ -305,11 +305,13 @@ export default function App() {
           {tab === "lessons" && (
             <LessonsView lessonId={lessonId} setLessonId={setLessonId}
               pins={pins[lessonId]} activePinId={activePinObj ? activePinObj.id : null}
-              onAddPin={addPin(lessonId)} onSelectPin={selectPin(lessonId)} />
+              onAddPin={addPin(lessonId)} onSelectPin={selectPin(lessonId)}
+              onDeletePin={(id) => deletePin(lessonId, id)} />
           )}
           {tab === "upload" && (
             <UploadView pins={pins.upload} activePinId={activePinObj ? activePinObj.id : null}
               onAddPin={addPin("upload")} onSelectPin={selectPin("upload")}
+              onDeletePin={(id) => deletePin("upload", id)}
               onNewImage={clearUploadPins}
               source={uploadSource} setSource={setUploadSource}
               fileName={uploadName} setFileName={setUploadName}
@@ -332,29 +334,44 @@ export default function App() {
             <ColorRecord hex={activeHex} sourceLabel={sourceLabel} onSave={save} activeBox={activeBox} onOpenMunsell={openMunsellPage} />
           </div>
 
-          {ctxKey && ctxPins.length > 0 && (
+          {ctxKey && (
             <div style={{ background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, padding: 18, marginTop: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 4 }}>
                 <span style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", color: T.ochre }}>
                   Pinned colours
                 </span>
-                {pinHistory.length > 0 && (
-                  <button onClick={undoPin} title="Undo last pin (Ctrl+Z)" aria-label="Undo last pin action" style={{
-                    fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.faint,
-                    background: "transparent", border: `1px dashed ${T.line}`, borderRadius: 3,
-                    padding: "6px 9px", cursor: "pointer", fontFamily: "inherit", marginRight: 6,
-                  }}>
-                    Undo
+                {ctxPins.length > 0 && (
+                  <button onClick={() => deletePin(ctxKey, ctxPins[ctxPins.length - 1].id)}
+                    title="Remove the most recent pin (Ctrl+Z restores it)"
+                    aria-label="Remove the most recent pin" style={{
+                      fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.faint,
+                      background: "transparent", border: `1px dashed ${T.line}`, borderRadius: 3,
+                      padding: "6px 9px", cursor: "pointer", fontFamily: "inherit", marginRight: 6,
+                    }}>
+                    Remove last
                   </button>
                 )}
-                <button onClick={() => clearPins(ctxKey)} aria-label="Remove all pins and start again"
-                  title="Remove all pins (undoable)" style={{
-                    fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.faint,
-                    background: "transparent", border: `1px dashed ${T.line}`, borderRadius: 3,
+                {ctxPins.length > 0 && (
+                  <button onClick={() => clearPins(ctxKey)} aria-label="Remove all pins and start again"
+                    title="Remove all pins (Ctrl+Z restores them)" style={{
+                      fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.faint,
+                      background: "transparent", border: `1px dashed ${T.line}`, borderRadius: 3,
+                      padding: "6px 9px", cursor: "pointer", fontFamily: "inherit", marginRight: 6,
+                    }}>
+                    Clear all
+                  </button>
+                )}
+                {ctxPins.length === 0 && pinHistory.length > 0 &&
+                  pinHistory[pinHistory.length - 1].key === ctxKey &&
+                  pinHistory[pinHistory.length - 1].type !== "add" && (
+                  <button onClick={undoPin} aria-label="Restore the pins you just removed" style={{
+                    fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.ochre,
+                    background: "transparent", border: `1px dashed ${T.ochre}`, borderRadius: 3,
                     padding: "6px 9px", cursor: "pointer", fontFamily: "inherit", marginRight: 6,
                   }}>
-                  Clear all
-                </button>
+                    Restore pins
+                  </button>
+                )}
                 {tab === "lessons" && ctxPins.length > 0 && (
                   <button onClick={shareStudy} style={{
                     fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.ochre,
@@ -364,7 +381,7 @@ export default function App() {
                     {shareMsg || "Share"}
                   </button>
                 )}
-                {sheetImage && (
+                {sheetImage && ctxPins.length > 0 && (
                   <button onClick={() => setSheetOpen(true)} style={{
                     fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.ochre,
                     background: "transparent", border: `1px solid ${T.ochre}`, borderRadius: 3,
@@ -374,6 +391,12 @@ export default function App() {
                   </button>
                 )}
               </div>
+              {ctxPins.length === 0 && (
+                <div style={{ color: T.faint, fontSize: 12, fontStyle: "italic" }}>
+                  No pins on this painting yet. Select a pin on the painting to reveal its ×, or
+                  manage them all from here once you've dropped some.
+                </div>
+              )}
               {ctxPins.map((p) => (
                 <Fragment key={p.id}>
                 <div style={{

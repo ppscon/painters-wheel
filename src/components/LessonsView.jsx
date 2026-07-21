@@ -2,7 +2,7 @@ import { T } from "./ui.jsx";
 import { SamplerCanvas } from "./SamplerCanvas.jsx";
 import { LESSONS } from "../data/lessons.js";
 /* ---------------- Lessons view ------------------------------------ */
-function LessonsView({ lessonId, setLessonId, pins, activePinId, onAddPin, onSelectPin }) {
+function LessonsView({ lessonId, setLessonId, pins, activePinId, onAddPin, onSelectPin, onDeletePin }) {
   const lesson = LESSONS.find((l) => l.id === lessonId);
   return (
     <div>
@@ -46,7 +46,7 @@ function LessonsView({ lessonId, setLessonId, pins, activePinId, onAddPin, onSel
         </ol>
       </div>
 
-      <SamplerCanvas source={lesson.source} pins={pins} activePinId={activePinId}
+      <SamplerCanvas source={lesson.source} pins={pins} activePinId={activePinId} onDeletePin={onDeletePin}
         onAddPin={onAddPin} onSelectPin={onSelectPin} />
       <p style={{ color: T.faint, fontSize: 12, lineHeight: 1.6, marginTop: 10 }}>
         {lesson.credit} Sampled colours reflect the reproduction, not raw pigment; treat matches as

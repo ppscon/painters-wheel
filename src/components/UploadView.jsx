@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { T } from "./ui.jsx";
 import { SamplerCanvas } from "./SamplerCanvas.jsx";
 /* ---------------- Your canvas (upload + analysis) view ------------ */
-function UploadView({ pins, activePinId, onAddPin, onSelectPin, onNewImage, setSampled, source, setSource, fileName, setFileName, onPaletteSheet }) {
+function UploadView({ pins, activePinId, onAddPin, onSelectPin, onDeletePin, onNewImage, setSampled, source, setSource, fileName, setFileName, onPaletteSheet }) {
   const [autoPalette, setAutoPalette] = useState([]);
   const onPalette = useCallback((p) => setAutoPalette(p), []);
   const onFile = (e) => {
@@ -45,7 +45,8 @@ function UploadView({ pins, activePinId, onAddPin, onSelectPin, onNewImage, setS
       ) : (
         <div>
           <SamplerCanvas source={source} pins={pins} activePinId={activePinId}
-            onAddPin={onAddPin} onSelectPin={onSelectPin} extract onPalette={onPalette} />
+            onAddPin={onAddPin} onSelectPin={onSelectPin} onDeletePin={onDeletePin}
+            extract onPalette={onPalette} />
           {autoPalette.length > 0 && (
             <div style={{ marginTop: 14 }}>
               <div style={{

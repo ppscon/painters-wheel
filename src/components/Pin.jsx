@@ -1,7 +1,7 @@
 import { T } from "./ui.jsx";
 import { hexToRgb, rgbToLab } from "../color/math.js";
 /* ---------------- Map-style pin ---------------------------------- */
-function Pin({ pin, active, onSelect }) {
+function Pin({ pin, active, onSelect, onDelete }) {
   const [L] = rgbToLab(...hexToRgb(pin.hex));
   const numColor = L > 55 ? "#1B1512" : "#EDE4D3";
   const ring = active ? T.ochre : T.bone;
@@ -33,6 +33,27 @@ function Pin({ pin, active, onSelect }) {
         borderLeft: "5px solid transparent", borderRight: "5px solid transparent",
         borderTop: `7px solid ${ring}`,
       }} />
+      {active && onDelete && (
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label={`Remove pin ${pin.num}`}
+          title="Remove this pin"
+          onClick={(e) => { e.stopPropagation(); onDelete(pin.id); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); e.preventDefault(); onDelete(pin.id); }
+          }}
+          style={{
+            position: "absolute", top: -4, right: -8, width: 22, height: 22,
+            borderRadius: "50%", background: T.ground, color: T.bone,
+            border: `1.5px solid ${T.ochre}`, display: "flex", alignItems: "center",
+            justifyContent: "center", fontSize: 13, lineHeight: 1, cursor: "pointer",
+            boxShadow: "0 2px 6px rgba(0,0,0,.6)",
+          }}
+        >
+          ×
+        </span>
+      )}
     </button>
   );
 }

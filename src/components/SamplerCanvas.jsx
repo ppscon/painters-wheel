@@ -53,7 +53,7 @@ function computeLuminosityHist(src) {
 }
 const COARSE = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
 
-function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extract, onPalette }) {
+function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, onDeletePin, extract, onPalette }) {
   const wrapRef = useRef(null);
   const dispRef = useRef(null);
   const srcRef = useRef(null);
@@ -354,7 +354,7 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
           </div>
         )}
         {status === "ready" && pins.map((p) => (
-          <Pin key={p.id} pin={p} active={p.id === activePinId} onSelect={onSelectPin} />
+          <Pin key={p.id} pin={p} active={p.id === activePinId} onSelect={onSelectPin} onDelete={onDeletePin} />
         ))}
         {loupe && (
           <div style={{
