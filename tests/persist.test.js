@@ -67,3 +67,26 @@ describe("loadSaved", () => {
     expect(out.palette).toEqual(["#112233"]);
   });
 });
+
+describe("loadSaved shopping list", () => {
+  it("round-trips a saved shopping list", () => {
+    const out = loadSaved(fakeStore(JSON.stringify({
+      shop: { targets: [{ hex: "#aabbcc", label: "Cluster 1" }], ticked: ["W&N::Yellow Ochre"], name: "study.jpg" },
+    })));
+    expect(out.shop.targets).toEqual([{ hex: "#AABBCC", label: "Cluster 1" }]);
+    expect(out.shop.ticked).toEqual(["W&N::Yellow Ochre"]);
+    expect(out.shop.name).toBe("study.jpg");
+  });
+  it("sanitises malformed shop data to defaults", () => {
+    const out = loadSaved(fakeStore(JSON.stringify({
+      shop: { targets: [null, { hex: "bad" }, 5], ticked: "nope", name: 42 },
+    })));
+    expect(out.shop.targets).toEqual([]);
+    expect(out.shop.ticked).toEqual([]);
+    expect(out.shop.name).toBeNull();
+  });
+  it("defaults shop when absent", () => {
+    const out = loadSaved(fakeStore(JSON.stringify({ palette: [] })));
+    expect(out.shop).toEqual({ targets: [], ticked: [], name: null });
+  });
+});

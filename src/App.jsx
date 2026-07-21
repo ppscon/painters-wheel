@@ -83,15 +83,40 @@ export default function App() {
   const [uploadName, setUploadName] = useState(null);
   const [uploadPalette, setUploadPalette] = useState([]);
   const onUploadPalette = useCallback((p) => setUploadPalette(p), []);
+  const [shop, setShop] = useState(saved.shop);
+
+  /* The shopping list is a persisted snapshot of the last Your Canvas
+     analysis, so it survives reloads even though the image does not.
+     A new analysis replaces the snapshot and resets the tick-offs;
+     re-analysing the same colours keeps them. */
+  const liveTargets = useMemo(() => {
+    const seen = new Set(), t = [];
+    uploadPalette.forEach((c, i) => {
+      if (!seen.has(c.hex)) { seen.add(c.hex); t.push({ hex: c.hex, label: `Cluster ${i + 1} · ${c.pct.toFixed(0)}% of surface` }); }
+    });
+    pins.upload.forEach((p) => {
+      if (!seen.has(p.hex)) { seen.add(p.hex); t.push({ hex: p.hex, label: `Pin ${p.num}${p.label ? " · " + p.label : ""}` }); }
+    });
+    return t;
+  }, [uploadPalette, pins]);
+  useEffect(() => {
+    if (!liveTargets.length) return;
+    setShop((prev) => {
+      const same = prev.targets.length === liveTargets.length &&
+        prev.targets.every((t, i) => t.hex === liveTargets[i].hex && t.label === liveTargets[i].label);
+      if (same && (prev.name || null) === (uploadName || null)) return prev;
+      return { targets: liveTargets, ticked: same ? prev.ticked : [], name: uploadName || null };
+    });
+  }, [liveTargets, uploadName]);
 
   const recordRef = useRef(null);
 
   useEffect(() => {
     if (!PW_STORE) return;
     try {
-      PW_STORE.setItem(PW_KEY, JSON.stringify({ pins: { ...pins, upload: [] }, palette, box: [...box], boxOnly }));
+      PW_STORE.setItem(PW_KEY, JSON.stringify({ pins: { ...pins, upload: [] }, palette, box: [...box], boxOnly, shop }));
     } catch (e) { /* storage full or unavailable; persistence is best-effort */ }
-  }, [pins, palette, box, boxOnly]);
+  }, [pins, palette, box, boxOnly, shop]);
 
   const ctxKey = tab === "lessons" ? lessonId : tab === "upload" ? "upload" : null;
   const ctxPins = ctxKey ? pins[ctxKey] : [];
@@ -327,7 +352,11 @@ export default function App() {
             <ZornView activeBox={activeBox} setSampled={(h) => { setZornHex(h); setViewHex(null); setActivePin(null); }} />
           )}
           {tab === "shop" && (
-            <ShoppingListView clusters={uploadPalette} uploadPins={pins.upload} box={box} uploadName={uploadName} />
+            <ShoppingListView targets={shop.targets} name={shop.name} ticked={shop.ticked} box={box}
+              onToggleTick={(key) => setShop((s) => ({
+                ...s,
+                ticked: s.ticked.includes(key) ? s.ticked.filter((k) => k !== key) : [...s.ticked, key],
+              }))} />
           )}
           {tab === "box" && (
             <PaintboxView box={box} setBox={setBox} boxOnly={boxOnly} setBoxOnly={setBoxOnly} />

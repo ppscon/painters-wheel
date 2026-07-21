@@ -75,28 +75,13 @@ function PaintRow({ entry, ticked, onTick }) {
   );
 }
 
-function ShoppingListView({ clusters, uploadPins, box, uploadName }) {
-  const [ticked, setTicked] = useState(() => new Set());
+function ShoppingListView({ targets, name, ticked, box, onToggleTick }) {
   const [copied, setCopied] = useState(false);
-  const targets = useMemo(() => {
-    const seen = new Set(), t = [];
-    clusters.forEach((c, i) => {
-      if (!seen.has(c.hex)) { seen.add(c.hex); t.push({ hex: c.hex, label: `Cluster ${i + 1} · ${c.pct.toFixed(0)}% of surface` }); }
-    });
-    uploadPins.forEach((p) => {
-      if (!seen.has(p.hex)) { seen.add(p.hex); t.push({ hex: p.hex, label: `Pin ${p.num}${p.label ? " · " + p.label : ""}` }); }
-    });
-    return t;
-  }, [clusters, uploadPins]);
+  const tickedSet = useMemo(() => new Set(ticked), [ticked]);
   const list = useMemo(() => buildList(targets, box), [targets, box]);
-  const tick = (key) => setTicked((s) => {
-    const n = new Set(s);
-    if (n.has(key)) n.delete(key); else n.add(key);
-    return n;
-  });
   const copyList = () => {
     const lines = list.toBuy.map((e) => `${e.paint.n} — ${e.paint.m} (${e.paint.p}, Series ${e.paint.s})`);
-    const text = `Paint shopping list${uploadName ? ` — ${uploadName}` : ""}\n${lines.join("\n")}`;
+    const text = `Paint shopping list${name ? ` — ${name}` : ""}\n${lines.join("\n")}`;
     const done = () => { setCopied(true); setTimeout(() => setCopied(false), 2200); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done).catch(() => window.prompt("Copy your shopping list:", text));
@@ -108,7 +93,7 @@ function ShoppingListView({ clusters, uploadPins, box, uploadName }) {
     <div>
       <div className="display" style={{ fontSize: 22, color: T.bone }}>Shopping List</div>
       <div style={{ fontSize: 12, color: T.muted, fontStyle: "italic" }}>
-        {uploadName ? `The tubes needed to paint ${uploadName}` : "The tubes needed to paint your image"}
+        {name ? `The tubes needed to paint ${name}` : "The tubes needed to paint your image"}
       </div>
       {targets.length === 0 ? (
         <div style={{
@@ -134,7 +119,7 @@ function ShoppingListView({ clusters, uploadPins, box, uploadName }) {
           ) : (
             <div>
               {list.toBuy.map((e) => (
-                <PaintRow key={e.key} entry={e} ticked={ticked.has(e.key)} onTick={() => tick(e.key)} />
+                <PaintRow key={e.key} entry={e} ticked={tickedSet.has(e.key)} onTick={() => onToggleTick(e.key)} />
               ))}
               <button onClick={copyList} style={{
                 marginTop: 12, padding: "8px 16px", fontSize: 11, letterSpacing: 1.5,
@@ -154,8 +139,9 @@ function ShoppingListView({ clusters, uploadPins, box, uploadName }) {
             </div>
           )}
           <p style={{ color: T.faint, fontSize: 11, lineHeight: 1.6, marginTop: 14 }}>
-            Tick tubes off as you buy them; the list rebuilds from the current Your Canvas image, so
-            it resets when you analyse a new picture.
+            Tick tubes off as you buy them — the list and your ticks are saved in this browser and
+            survive reloads. Analysing a new picture in Your Canvas replaces the list and resets
+            the ticks.
           </p>
         </div>
       )}

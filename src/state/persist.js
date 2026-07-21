@@ -35,6 +35,7 @@ function loadSaved(store = PW_STORE) {
     palette: [],
     box: new Set(),
     boxOnly: false,
+    shop: { targets: [], ticked: [], name: null },
   };
   if (!store) return out;
   try {
@@ -55,6 +56,17 @@ function loadSaved(store = PW_STORE) {
         out.box = new Set(saved.box.filter((k) => typeof k === "string"));
       }
       out.boxOnly = !!saved.boxOnly;
+      if (saved.shop && typeof saved.shop === "object") {
+        if (Array.isArray(saved.shop.targets)) {
+          out.shop.targets = saved.shop.targets
+            .filter((t) => t && typeof t === "object" && typeof t.hex === "string" && HEX_RE.test(t.hex))
+            .map((t) => ({ hex: t.hex.toUpperCase(), label: typeof t.label === "string" ? t.label : "" }));
+        }
+        if (Array.isArray(saved.shop.ticked)) {
+          out.shop.ticked = saved.shop.ticked.filter((k) => typeof k === "string");
+        }
+        if (typeof saved.shop.name === "string") out.shop.name = saved.shop.name;
+      }
     }
     for (const k of LESSON_KEYS) {
       for (const p of out.pins[k]) if (p.id >= PIN_SEQ) PIN_SEQ = p.id + 1;
