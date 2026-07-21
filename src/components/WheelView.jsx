@@ -23,7 +23,7 @@ function MunsellExplorer({ onPick, jump }) {
           width: 30, height: 30, borderRadius: 4, background: "transparent", color: T.muted,
           border: `1px solid ${T.line}`, cursor: "pointer", fontFamily: "inherit", fontSize: 14,
         }}>{"\u2039"}</button>
-        <input type="range" min="0" max="39" step="1" value={hueIdx}
+        <input type="range" min="0" max="39" step="1" value={hueIdx} aria-label="Munsell hue page"
           onChange={(e) => setHueIdx(Number(e.target.value))}
           style={{ flex: 1, accentColor: T.ochre }} />
         <button onClick={() => setHueIdx((hueIdx + 1) % 40)} style={{
@@ -152,7 +152,7 @@ function WheelView({ selected, setSelected, activeBox, munsellJump }) {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
         <span style={{ fontSize: 10, color: T.faint, width: 74, textAlign: "right", flexShrink: 0 }}>{leftCap}</span>
-        <input type="range" min={min} max={max} step="1" value={val}
+        <input type="range" min={min} max={max} step="1" value={val} aria-label={label}
           onChange={(e) => onChange(Number(e.target.value))}
           style={{ flex: 1, accentColor: T.ochre }} />
         <span style={{ fontSize: 10, color: T.faint, width: 74, flexShrink: 0 }}>{rightCap}</span>
@@ -164,7 +164,7 @@ function WheelView({ selected, setSelected, activeBox, munsellJump }) {
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         {[["ryb", "RYB wheel"], ["munsell", "Munsell pages"]].map(([k, lbl]) => (
-          <button key={k} onClick={() => setMode(k)} style={{
+          <button key={k} onClick={() => setMode(k)} aria-pressed={mode === k} style={{
             padding: "6px 14px", fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase",
             background: mode === k ? T.ochre : "transparent",
             color: mode === k ? T.ground : T.muted,
@@ -210,7 +210,14 @@ function WheelView({ selected, setSelected, activeBox, munsellJump }) {
               strokeWidth={isSel ? 0 : 2}
               opacity={selIdx == null || isSel || isRel ? 1 : 0.35}
               style={{ cursor: "pointer", transition: "opacity .25s" }}
-              onClick={() => pick(i)}>
+              tabIndex={0}
+              role="button"
+              aria-label={`${h.name}${isSel ? ", selected" : ""}`}
+              aria-pressed={isSel}
+              onClick={() => pick(i)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(i); }
+              }}>
               <title>{h.name}</title>
             </path>
           );

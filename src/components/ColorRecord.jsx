@@ -9,7 +9,7 @@ function dELabel(dE) {
   if (dE < 3) return { t: "excellent match", c: "#4DB6AC" };
   if (dE < 6) return { t: "close, adjust slightly", c: T.ochre };
   if (dE < 12) return { t: "base for a mixture", c: "#C9962E" };
-  return { t: "mixing required", c: T.vermilion };
+  return { t: "mixing required", c: T.vermilionSoft };
 }
 function ColorRecord({ hex, sourceLabel, onSave, activeBox, onOpenMunsell }) {
   const rec = useColorRecord(hex, activeBox);

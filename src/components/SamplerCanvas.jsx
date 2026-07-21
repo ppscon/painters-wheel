@@ -186,6 +186,43 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
     onAddPin({ fx, fy, hex: sampleAvg(x, y) });
   };
 
+  /* Keyboard sampling: arrows steer a virtual crosshair (Shift for
+     bigger steps), Enter/Space drops a pin, Escape dismisses the loupe.
+     Each move is announced to screen readers via the live region. */
+  const kbPos = useRef(null);
+  const [announce, setAnnounce] = useState("");
+  const onKeyDown = (e) => {
+    if (status !== "ready") return;
+    const step = e.shiftKey ? 0.05 : 0.01;
+    let p = kbPos.current || { fx: 0.5, fy: 0.5 };
+    if (e.key === "ArrowLeft") p = { ...p, fx: Math.max(0, p.fx - step) };
+    else if (e.key === "ArrowRight") p = { ...p, fx: Math.min(1, p.fx + step) };
+    else if (e.key === "ArrowUp") p = { ...p, fy: Math.max(0, p.fy - step) };
+    else if (e.key === "ArrowDown") p = { ...p, fy: Math.min(1, p.fy + step) };
+    else if (e.key === "Enter" || e.key === " ") {
+      if (!kbPos.current) return;
+      e.preventDefault();
+      const disp = dispRef.current;
+      const { fx, fy } = kbPos.current;
+      const x = Math.round(fx * disp.width), y = Math.round(fy * disp.height);
+      const hex = sampleAvg(x, y);
+      onAddPin({ fx, fy, hex });
+      setAnnounce(`Pin dropped at ${hex}`);
+      return;
+    } else if (e.key === "Escape") {
+      kbPos.current = null;
+      setLoupe(null);
+      return;
+    } else return;
+    e.preventDefault();
+    kbPos.current = p;
+    const disp = dispRef.current;
+    const rect = disp.getBoundingClientRect();
+    queueMove(rect.left + p.fx * rect.width, rect.top + p.fy * rect.height, false);
+    const x = Math.round(p.fx * disp.width), y = Math.round(p.fy * disp.height);
+    setAnnounce(`${sampleAvg(x, y)}, ${Math.round(p.fx * 100)}% across, ${Math.round(p.fy * 100)}% down`);
+  };
+
   /* Touch model: hold ~300ms to start sampling (loupe appears), drag to
      inspect, lift to pin. A moving touch is a scroll and is left to the
      browser (touch-action: pan-y); a quick tap just shows a hint. This
@@ -293,9 +330,20 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
           </div>
         )}
         <canvas ref={dispRef}
+          tabIndex={0}
+          role="application"
+          aria-label="Painting sampler. Use the arrow keys to move the sampling point, hold Shift for larger steps, and press Enter to drop a pin."
+          onKeyDown={onKeyDown}
           onMouseMove={(e) => queueMove(e.clientX, e.clientY, false)}
           onMouseLeave={() => setLoupe(null)} onClick={onClick}
+          onBlur={() => setLoupe(null)}
           style={{ width: "100%", display: status === "ready" ? "block" : "none", cursor: "crosshair", touchAction: "pan-y" }} />
+        <span aria-live="polite" style={{
+          position: "absolute", width: 1, height: 1, overflow: "hidden",
+          clipPath: "inset(50%)", whiteSpace: "nowrap",
+        }}>
+          {announce}
+        </span>
         {hint && (
           <div style={{
             position: "absolute", left: "50%", top: 12, transform: "translateX(-50%)",

@@ -1,7 +1,7 @@
-import { T } from "./ui.jsx";
+import { T, useModalDialog } from "./ui.jsx";
 /* ---------------- Tooltips and help ------------------------------- */
 const HELP_SECTIONS = [
-  ["Lessons", "Four paintings teach the four pillars. Hover (or touch-drag) for the loupe, click (or lift your finger) to drop a numbered pin, and click a pin to recall its record. The view buttons switch between colour, plain value, and 3, 5 or 9-step posterisation; the histogram beneath shows how the picture's values mass into shadow, mid and light zones."],
+  ["Lessons", "Four paintings teach the four pillars. Hover for the loupe and click to drop a numbered pin; on touch, hold for a moment to raise the loupe, drag to inspect, and lift to pin. Keyboard users can focus the painting and steer the sampling point with the arrow keys, dropping a pin with Enter. Click a pin to recall its record. The view buttons switch between colour, plain value, and 3, 5 or 9-step posterisation; the histogram beneath shows how the picture's values mass into shadow, mid and light zones."],
   ["Your Canvas", "Load any image of your own; it stays in your browser and is never uploaded. You get the same pinning, value views and histogram, plus an automatic extraction of the picture's eight dominant colour clusters."],
   ["Colour Wheel", "The RYB wheel is a mixing lab: pick a hue, then lean it warm or cool along the wheel, cancel its chroma toward the complement, or take it up and down in value, comparing darkening with black against darkening with the complement. The Munsell pages toggle opens all 40 constant-hue pages of the measured renotation data."],
   ["Zorn Palette", "The four-tube portrait method: white, yellow ochre, cadmium red and ivory black. The mixing lab derives the classic earth tones live, the relativity demo shows one grey reading blue against a warm ground, and the block-in walks the five stages of a classical portrait."],
@@ -20,6 +20,7 @@ const HELP_GLOSSARY = [
   ["Opacity codes", "O opaque, SO semi-opaque, ST semi-transparent, T transparent. Series is the maker's price band."],
 ];
 function HelpOverlay({ onClose }) {
+  const dialogRef = useModalDialog(onClose);
   return (
     <div
       className="pw-help-overlay"
@@ -30,6 +31,10 @@ function HelpOverlay({ onClose }) {
       }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="How to use The Painter's Wheel"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: T.panel, border: `1px solid ${T.line}`, borderRadius: 8,

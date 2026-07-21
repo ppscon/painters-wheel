@@ -25,7 +25,7 @@ export class ErrorBoundary extends Component {
               An unexpected error stopped the app. Reloading usually fixes it; your pins, palette
               and paintbox are saved in this browser and will still be here.
             </p>
-            <p style={{ color: "#6E6350", fontSize: 11, fontFamily: "ui-monospace, monospace", marginTop: 8, wordBreak: "break-word" }}>
+            <p style={{ color: "#9B8D72", fontSize: 11, fontFamily: "ui-monospace, monospace", marginTop: 8, wordBreak: "break-word" }}>
               {String((this.state.error && this.state.error.message) || this.state.error)}
             </p>
             <button onClick={() => window.location.reload()} style={{
@@ -47,7 +47,7 @@ export class ErrorBoundary extends Component {
               }}>
               Reset saved data
             </button>
-            <p style={{ color: "#6E6350", fontSize: 11, marginTop: 10 }}>
+            <p style={{ color: "#9B8D72", fontSize: 11, marginTop: 10 }}>
               If reloading doesn't help, resetting clears saved pins and palette — a corrupted save
               can otherwise keep the error coming back.
             </p>

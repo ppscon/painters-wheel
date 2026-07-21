@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 const T = {
   ground: "#1B1512",
   panel: "#252017",
@@ -6,10 +6,51 @@ const T = {
   line: "#3D3527",
   bone: "#EDE4D3",
   muted: "#9C8F78",
-  faint: "#6E6350",
+  /* 4.65:1 on panel2, 5.55:1 on ground — the old #6E6350 failed WCAG AA
+     (2.57:1 on panel2) at the 10–12px sizes this token is used at. */
+  faint: "#9B8D72",
   ochre: "#C9962E",
   vermilion: "#C8452C",
+  /* For small text on dark panels; vermilion itself is only 3.1:1 there. */
+  vermilionSoft: "#E07B5F",
 };
+
+/* Minimal modal behaviour: focus moves in, Tab cycles inside, Escape
+   closes, focus returns to the opener, body scroll locks. */
+function useModalDialog(onClose) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const opener = document.activeElement;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusables = () =>
+      ref.current
+        ? Array.from(ref.current.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+        : [];
+    const first = focusables()[0];
+    if (first) first.focus();
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      } else if (e.key === "Tab") {
+        const els = focusables();
+        if (!els.length) return;
+        const firstEl = els[0], lastEl = els[els.length - 1];
+        if (e.shiftKey && document.activeElement === firstEl) { e.preventDefault(); lastEl.focus(); }
+        else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); firstEl.focus(); }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+      if (opener && opener.focus) opener.focus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return ref;
+}
 
 
 function SectionRule({ children }) {
@@ -33,17 +74,24 @@ function Tip({ text, side = "top" }) {
       onMouseLeave={() => setOpen(false)}
     >
       <button
-        aria-label="More information"
+        aria-label={typeof text === "string" ? `More information: ${text.slice(0, 60)}` : "More information"}
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         onBlur={() => setOpen(false)}
         style={{
-          width: 15, height: 15, borderRadius: "50%", padding: 0, marginLeft: 5,
-          background: "transparent", border: `1px solid ${T.faint}`, color: T.faint,
-          fontSize: 9, lineHeight: 1, cursor: "help", fontFamily: "inherit",
-          verticalAlign: "middle",
+          /* 15px visual ring inside a ~27px hit area */
+          width: 27, height: 27, borderRadius: "50%", padding: 6, marginLeft: 2,
+          background: "transparent", border: "none", cursor: "help", fontFamily: "inherit",
+          verticalAlign: "middle", lineHeight: 0,
         }}
       >
-        ?
+        <span style={{
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          width: 15, height: 15, borderRadius: "50%", border: `1px solid ${T.faint}`,
+          color: T.faint, fontSize: 9, lineHeight: 1,
+        }}>
+          ?
+        </span>
       </button>
       {open && (
         <span
@@ -68,4 +116,4 @@ function Tip({ text, side = "top" }) {
   );
 }
 
-export { T, SectionRule, Tip };
+export { T, SectionRule, Tip, useModalDialog };

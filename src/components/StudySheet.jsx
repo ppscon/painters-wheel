@@ -1,11 +1,13 @@
 import { hexToRgb, rgbToLab } from "../color/math.js";
 import { computeRecord } from "../color/paints.js";
+import { useModalDialog } from "./ui.jsx";
 /* ---------------- Study sheet ------------------------------------- */
 const SHEET = {
   paper: "#FBF7EE", ink: "#2B241A", sub: "#6E6350",
   line: "#D8CFBC", accent: "#8A6614",
 };
 function StudySheet({ title, subtitle, image, pins, activeBox, onClose }) {
+  const dialogRef = useModalDialog(onClose);
   const recs = pins.map((p) => ({ p, r: computeRecord(p.hex, activeBox) }));
   const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   return (
@@ -13,7 +15,8 @@ function StudySheet({ title, subtitle, image, pins, activeBox, onClose }) {
       position: "fixed", inset: 0, background: "rgba(10,7,5,.72)", zIndex: 60,
       overflowY: "auto", padding: 18, display: "flex", justifyContent: "center",
     }}>
-      <div className="pw-sheet" onClick={(e) => e.stopPropagation()} style={{
+      <div className="pw-sheet" ref={dialogRef} role="dialog" aria-modal="true"
+        aria-label={`Study sheet: ${title}`} onClick={(e) => e.stopPropagation()} style={{
         background: SHEET.paper, color: SHEET.ink, width: "100%", maxWidth: 780,
         borderRadius: 6, padding: "26px 30px", height: "fit-content",
         boxShadow: "0 18px 60px rgba(0,0,0,.6)",
@@ -45,7 +48,7 @@ function StudySheet({ title, subtitle, image, pins, activeBox, onClose }) {
 
         <div style={{ position: "relative", lineHeight: 0, marginTop: 14 }}>
           <img src={image} alt={title} style={{ width: "100%", borderRadius: 4, display: "block" }} />
-          {pins.map((p) => (
+          {pins.filter((p) => p.fx != null && p.fy != null).map((p) => (
             <span key={p.id} style={{
               position: "absolute", left: `${p.fx * 100}%`, top: `${p.fy * 100}%`,
               transform: "translate(-50%, -100%)",

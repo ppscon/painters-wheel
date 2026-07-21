@@ -97,7 +97,8 @@ function PaintboxView({ box, setBox, boxOnly, setBoxOnly }) {
                 const key = p.m + "::" + p.n;
                 const on = box.has(key);
                 return (
-                  <button key={key} onClick={() => toggle(key)} style={{
+                  <button key={key} onClick={() => toggle(key)} aria-pressed={on}
+                    aria-label={`${p.n}, ${p.m}${on ? ", in your paintbox" : ""}`} style={{
                     display: "flex", alignItems: "center", gap: 8, textAlign: "left",
                     padding: "7px 9px", borderRadius: 4, cursor: "pointer", fontFamily: "inherit",
                     background: on ? T.panel2 : "transparent",

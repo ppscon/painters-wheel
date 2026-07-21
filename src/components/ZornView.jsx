@@ -67,7 +67,7 @@ function ZornView({ setSampled, activeBox }) {
       </p>
       <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "8px 0 2px" }}>
         <span style={{ fontSize: 11, color: T.muted, letterSpacing: 1, textTransform: "uppercase", flexShrink: 0 }}>Tint with white</span>
-        <input type="range" min="0" max="6" step="1" value={tint}
+        <input type="range" min="0" max="6" step="1" value={tint} aria-label="Tint with white"
           onChange={(e) => setTint(Number(e.target.value))}
           style={{ flex: 1, accentColor: T.ochre }} />
         <span className="mono" style={{ fontSize: 11, color: T.faint, width: 62, textAlign: "right", flexShrink: 0 }}>
