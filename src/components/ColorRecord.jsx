@@ -11,7 +11,7 @@ function dELabel(dE) {
   if (dE < 12) return { t: "base for a mixture", c: "#C9962E" };
   return { t: "mixing required", c: T.vermilion };
 }
-function ColorRecord({ hex, sourceLabel, onSave, activeBox }) {
+function ColorRecord({ hex, sourceLabel, onSave, activeBox, onOpenMunsell }) {
   const rec = useColorRecord(hex, activeBox);
   if (!rec)
     return (
@@ -44,6 +44,15 @@ function ColorRecord({ hex, sourceLabel, onSave, activeBox }) {
               Munsell ≈ {rec.munsell}
             </span>
             <Tip text={'Munsell notation: hue, then value/chroma. 7.5R 5.2/19 reads as a red of hue step 7.5, value 5.2 (mid), chroma 19 (intense). Interpolated here from the 2,734 measured renotation colours.'} side="bottom" />
+            {onOpenMunsell && !rec.munsell.startsWith("N ") && (
+              <button onClick={() => onOpenMunsell(rec.munsell)} style={{
+                display: "block", marginTop: 5, background: "transparent", border: "none",
+                color: T.ochre, fontSize: 10, letterSpacing: 1, textTransform: "uppercase",
+                cursor: "pointer", padding: 0, fontFamily: "inherit", textDecoration: "underline",
+              }}>
+                View hue page {"\u2192"}
+              </button>
+            )}
           </div>
         </div>
       </div>

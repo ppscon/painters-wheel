@@ -6,8 +6,9 @@ import { mixMulti } from "../color/km.js";
 import { RYB, HARMONIES } from "../color/ryb.js";
 import { nearestPaint } from "../color/paints.js";
 import { ZHEX } from "../data/zorn.js";
-function MunsellExplorer({ onPick }) {
+function MunsellExplorer({ onPick, jump }) {
   const [hueIdx, setHueIdx] = useState(29);
+  useEffect(() => { if (jump) setHueIdx(jump.idx); }, [jump]);
   const pts = MUNSELL_BY_HUE[hueIdx].filter((p) => p.v >= 1);
   const values = [...new Set(pts.map((p) => p.v))].sort((x, y) => y - x);
   const maxC = pts.reduce((m, p) => Math.max(m, p.c), 2);
@@ -76,11 +77,12 @@ function MunsellExplorer({ onPick }) {
 }
 
 /* ---------------- Colour wheel view ------------------------------ */
-function WheelView({ selected, setSelected, activeBox }) {
+function WheelView({ selected, setSelected, activeBox, munsellJump }) {
   const size = 480, cx = size / 2, cy = size / 2;
   const rOut = 210, rIn = 118;
   const [harmony, setHarmony] = useState("complement");
   const [mode, setMode] = useState("ryb");
+  useEffect(() => { if (munsellJump) setMode("munsell"); }, [munsellJump]);
   const [selIdx, setSelIdx] = useState(null);
   const [nudge, setNudge] = useState(0);
   const [neutral, setNeutral] = useState(0);
@@ -170,7 +172,7 @@ function WheelView({ selected, setSelected, activeBox }) {
         ))}
       </div>
       {mode === "munsell" ? (
-        <MunsellExplorer onPick={(h) => setSelected(h)} />
+        <MunsellExplorer onPick={(h) => setSelected(h)} jump={munsellJump} />
       ) : (
       <>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>

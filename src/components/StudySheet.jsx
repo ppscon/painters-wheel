@@ -88,6 +88,9 @@ function StudySheet({ title, subtitle, image, pins, activeBox, onClose }) {
                   <span className="mono" style={{ display: "block", fontSize: 10, color: SHEET.sub }}>Munsell ≈ {r.munsell}</span>
                 </span>
               </div>
+              {p.label && (
+                <div style={{ fontSize: 10.5, color: SHEET.ink, fontStyle: "italic", marginTop: 4 }}>{p.label}</div>
+              )}
               <div style={{ fontSize: 10, color: SHEET.sub, marginTop: 6 }}>
                 {r.theory.temp} · {r.theory.valueZone}
               </div>

@@ -126,12 +126,12 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
     for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
     return rgbToHex(r / n, g / n, b / n);
   };
-  const onMove = (e) => {
+  const onMove = (e, lift) => {
     if (status !== "ready") return;
     const { x, y } = toCanvasCoords(e);
     const hex = sampleAvg(x, y);
     const wrapRect = wrapRef.current.getBoundingClientRect();
-    setLoupe({ x: e.clientX - wrapRect.left, y: e.clientY - wrapRect.top, hex });
+    setLoupe({ x: e.clientX - wrapRect.left, y: e.clientY - wrapRect.top - (lift ? 90 : 0), hex });
     const lc = loupeRef.current;
     if (lc) {
       const lctx = lc.getContext("2d");
@@ -153,7 +153,7 @@ function SamplerCanvas({ source, pins, activePinId, onAddPin, onSelectPin, extra
     const t = e.touches && e.touches[0];
     if (!t) return;
     lastPt.current = { clientX: t.clientX, clientY: t.clientY };
-    onMove(t);
+    onMove(t, true);
   };
   const onTouchEnd = () => {
     if (status !== "ready" || !lastPt.current) return;

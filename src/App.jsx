@@ -1,11 +1,11 @@
 
 /* ================================================================
-   THE PAINTER'S WHEEL: Phase 3.0
+   THE PAINTER'S WHEEL: Phase 3.1
    Lessons gateway (Contrast · Value · Hue · Chroma) with pin-based
    study, colour theory guidance, paint matching and mixing advice
    ================================================================ */
 
-import { useState, useEffect, useCallback } from "react";
+import { Fragment, useState, useEffect, useCallback } from "react";
 import { T } from "./components/ui.jsx";
 import { hexToRgb, rgbToLab } from "./color/math.js";
 import { labToMunsell } from "./color/munsell.js";
@@ -35,6 +35,10 @@ export default function App() {
   const [boxOnly, setBoxOnly] = useState(PW_INIT_BOXONLY);
   const activeBox = boxOnly && box.size >= 2 ? box : null;
   const [helpOpen, setHelpOpen] = useState(false);
+  const [pinHistory, setPinHistory] = useState([]);
+  const [editingPin, setEditingPin] = useState(null);
+  const [munsellJump, setMunsellJump] = useState(null);
+  const [shareMsg, setShareMsg] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [uploadSource, setUploadSource] = useState(null);
   const [uploadName, setUploadName] = useState(null);
@@ -63,6 +67,7 @@ export default function App() {
     setPins((prev) => {
       const num = prev[key].length ? Math.max(...prev[key].map((p) => p.num)) + 1 : 1;
       const pin = { id: nextPinId(), num, fx, fy, hex };
+      setPinHistory((h) => [...h.slice(-19), { type: "add", key, pin }]);
       setActivePin({ ctx: key, id: pin.id });
       return { ...prev, [key]: [...prev[key], pin] };
     });
@@ -75,7 +80,11 @@ export default function App() {
     setClusterHex(null);
   };
   const deletePin = (key, id) => {
-    setPins((prev) => ({ ...prev, [key]: prev[key].filter((p) => p.id !== id) }));
+    setPins((prev) => {
+      const pin = prev[key].find((p) => p.id === id);
+      if (pin) setPinHistory((h) => [...h.slice(-19), { type: "del", key, pin }]);
+      return { ...prev, [key]: prev[key].filter((p) => p.id !== id) };
+    });
     setActivePin((ap) => (ap && ap.ctx === key && ap.id === id ? null : ap));
   };
   const clearUploadPins = useCallback(() => {
@@ -91,8 +100,96 @@ export default function App() {
     viewHex ? "From saved palette" :
     tab === "wheel" ? (wheelHex ? "From the RYB wheel" : null) :
     tab === "zorn" ? (zornHex ? "From the Zorn palette study" : null) :
-    activePinObj ? `Pin ${activePinObj.num} · ${tab === "lessons" ? lessonTitle : "your image"}` :
+    activePinObj ? `Pin ${activePinObj.num}${activePinObj.label ? " · " + activePinObj.label : ""} · ${tab === "lessons" ? lessonTitle : "your image"}` :
     tab === "upload" && clusterHex ? "Dominant cluster from your image" : null;
+
+
+  const undoPin = useCallback(() => {
+    setPinHistory((h) => {
+      if (!h.length) return h;
+      const op = h[h.length - 1];
+      setPins((prev) => {
+        const list = prev[op.key] || [];
+        return op.type === "add"
+          ? { ...prev, [op.key]: list.filter((p) => p.id !== op.pin.id) }
+          : { ...prev, [op.key]: [...list, op.pin].sort((a, b) => a.num - b.num) };
+      });
+      setActivePin((ap) => (op.type === "add" && ap && ap.id === op.pin.id ? null : ap));
+      return h.slice(0, -1);
+    });
+  }, []);
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !/INPUT|TEXTAREA/.test(e.target.tagName)) {
+        e.preventDefault();
+        undoPin();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undoPin]);
+  const setPinLabel = (key, id, label) =>
+    setPins((prev) => ({ ...prev, [key]: prev[key].map((p) => (p.id === id ? { ...p, label: label || undefined } : p)) }));
+  const openMunsellPage = (notation) => {
+    const m = String(notation).match(/^([\d.]+)([A-Z]+)/);
+    if (!m) return;
+    const famIdx = ["R","YR","Y","GY","G","BG","B","PB","P","RP"].indexOf(m[2]);
+    if (famIdx < 0) return;
+    const step = Math.min(3, Math.max(0, Math.round(Number(m[1]) / 2.5) - 1));
+    setTab("wheel");
+    setViewHex(null);
+    setMunsellJump({ idx: famIdx * 4 + step, t: Date.now() });
+  };
+  const shareStudy = () => {
+    if (tab !== "lessons" || !ctxPins.length) return;
+    const enc = ctxPins.map((p) =>
+      [p.num, p.fx.toFixed(4), p.fy.toFixed(4), p.hex.slice(1), encodeURIComponent(p.label || "")].join(",")
+    ).join("~");
+    const url = `${location.origin}${location.pathname}#s=${lessonId}.${enc}`;
+    const done = () => { setShareMsg("Copied!"); setTimeout(() => setShareMsg(null), 2200); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(done).catch(() => window.prompt("Copy this study link:", url));
+    } else {
+      window.prompt("Copy this study link:", url);
+    }
+  };
+  useEffect(() => {
+    const m = location.hash.match(/^#s=([a-z]+)\.(.+)$/);
+    if (!m || !LESSONS.some((l) => l.id === m[1])) return;
+    try {
+      const incoming = m[2].split("~").map((s) => {
+        const [num, fx, fy, hx, label] = s.split(",");
+        return {
+          id: nextPinId(), num: Number(num), fx: Number(fx), fy: Number(fy),
+          hex: "#" + String(hx).toUpperCase(),
+          label: decodeURIComponent(label || "") || undefined,
+        };
+      }).filter((p) => p.num > 0 && p.fx >= 0 && p.fx <= 1 && p.fy >= 0 && p.fy <= 1 && /^#[0-9A-F]{6}$/.test(p.hex));
+      if (!incoming.length) return;
+      setTab("lessons");
+      setLessonId(m[1]);
+      setPins((prev) => ({ ...prev, [m[1]]: incoming }));
+      history.replaceState(null, "", location.pathname);
+    } catch (e) { /* malformed share link; ignore */ }
+  }, []);
+  const exportPalettePng = () => {
+    const w = 96, h = 132, c = document.createElement("canvas");
+    c.width = w * palette.length; c.height = h;
+    const x = c.getContext("2d");
+    x.fillStyle = "#FBF7EE"; x.fillRect(0, 0, c.width, h);
+    palette.forEach((hex, i) => {
+      x.fillStyle = hex; x.fillRect(i * w + 8, 8, w - 16, w - 16);
+      x.strokeStyle = "#D8CFBC"; x.strokeRect(i * w + 8.5, 8.5, w - 17, w - 17);
+      x.fillStyle = "#2B241A"; x.font = "11px ui-monospace, monospace"; x.textAlign = "center";
+      x.fillText(hex, i * w + w / 2, w + 8);
+      x.fillStyle = "#6E6350"; x.font = "8px ui-monospace, monospace";
+      x.fillText(labToMunsell(rgbToLab(...hexToRgb(hex))), i * w + w / 2, w + 22);
+    });
+    const a = document.createElement("a");
+    a.download = "painters-wheel-palette.png";
+    a.href = c.toDataURL("image/png");
+    a.click();
+  };
 
   const sheetImage =
     tab === "lessons" ? (LESSONS.find((l) => l.id === lessonId) || LESSONS[0]).source.url :
@@ -172,7 +269,7 @@ export default function App() {
       }}>
         <section style={{ background: T.panel, border: `1px solid ${T.line}`, borderRadius: 6, padding: 20 }}>
           {tab === "wheel" && (
-            <WheelView activeBox={activeBox} selected={wheelHex} setSelected={(h) => { setWheelHex(h); setViewHex(null); }} />
+            <WheelView activeBox={activeBox} munsellJump={munsellJump} selected={wheelHex} setSelected={(h) => { setWheelHex(h); setViewHex(null); }} />
           )}
           {tab === "lessons" && (
             <LessonsView lessonId={lessonId} setLessonId={setLessonId}
@@ -200,7 +297,7 @@ export default function App() {
             <div style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", color: T.ochre, marginBottom: 12 }}>
               Colour record
             </div>
-            <ColorRecord hex={activeHex} sourceLabel={sourceLabel} onSave={save} activeBox={activeBox} />
+            <ColorRecord hex={activeHex} sourceLabel={sourceLabel} onSave={save} activeBox={activeBox} onOpenMunsell={openMunsellPage} />
           </div>
 
           {ctxKey && ctxPins.length > 0 && (
@@ -209,6 +306,24 @@ export default function App() {
                 <span style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", color: T.ochre }}>
                   Pinned colours
                 </span>
+                {pinHistory.length > 0 && (
+                  <button onClick={undoPin} title="Undo last pin (Ctrl+Z)" style={{
+                    fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.faint,
+                    background: "transparent", border: `1px dashed ${T.line}`, borderRadius: 3,
+                    padding: "3px 8px", cursor: "pointer", fontFamily: "inherit", marginRight: 6,
+                  }}>
+                    Undo
+                  </button>
+                )}
+                {tab === "lessons" && ctxPins.length > 0 && (
+                  <button onClick={shareStudy} style={{
+                    fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.ochre,
+                    background: "transparent", border: `1px solid ${T.line}`, borderRadius: 3,
+                    padding: "3px 9px", cursor: "pointer", fontFamily: "inherit", marginRight: 6,
+                  }}>
+                    {shareMsg || "Share"}
+                  </button>
+                )}
                 {sheetImage && (
                   <button onClick={() => setSheetOpen(true)} style={{
                     fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.ochre,
@@ -220,7 +335,8 @@ export default function App() {
                 )}
               </div>
               {ctxPins.map((p) => (
-                <div key={p.id} style={{
+                <Fragment key={p.id}>
+                <div style={{
                   display: "flex", alignItems: "center", gap: 10, padding: "7px 0",
                   borderBottom: `1px solid ${T.line}`,
                 }}>
@@ -246,6 +362,12 @@ export default function App() {
                       {labToMunsell(rgbToLab(...hexToRgb(p.hex)))}
                     </span>
                   </button>
+                  <button onClick={() => setEditingPin(editingPin === p.id ? null : p.id)} title="Label pin" style={{
+                    background: "transparent", border: "none", color: T.faint,
+                    cursor: "pointer", fontSize: 12, padding: "0 2px", fontFamily: "inherit",
+                  }}>
+                    {"\u270e"}
+                  </button>
                   <button onClick={() => deletePin(ctxKey, p.id)} title="Remove pin" style={{
                     background: "transparent", border: "none", color: T.faint,
                     cursor: "pointer", fontSize: 14, padding: "0 2px", fontFamily: "inherit",
@@ -253,13 +375,41 @@ export default function App() {
                     ×
                   </button>
                 </div>
+                {p.label && editingPin !== p.id && (
+                  <div style={{ fontSize: 10, color: T.muted, fontStyle: "italic", padding: "2px 0 4px 36px" }}>{p.label}</div>
+                )}
+                {editingPin === p.id && (
+                  <input autoFocus defaultValue={p.label || ""} placeholder="Label this pin"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { setPinLabel(ctxKey, p.id, e.target.value.trim()); setEditingPin(null); }
+                      if (e.key === "Escape") setEditingPin(null);
+                    }}
+                    onBlur={(e) => { setPinLabel(ctxKey, p.id, e.target.value.trim()); setEditingPin(null); }}
+                    style={{
+                      margin: "4px 0 4px 0", fontSize: 11, background: T.ground, color: T.bone,
+                      border: `1px solid ${T.line}`, borderRadius: 3, padding: "3px 7px",
+                      fontFamily: "inherit", width: "100%", boxSizing: "border-box",
+                    }} />
+                )}
+                </Fragment>
               ))}
             </div>
           )}
 
           <div style={{ background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, padding: 18, marginTop: 16 }}>
-            <div style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", color: T.ochre, marginBottom: 10 }}>
-              Saved palette
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <span style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", color: T.ochre }}>
+                Saved palette
+              </span>
+              {palette.length > 0 && (
+                <button onClick={exportPalettePng} style={{
+                  fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.ochre,
+                  background: "transparent", border: `1px solid ${T.line}`, borderRadius: 3,
+                  padding: "3px 9px", cursor: "pointer", fontFamily: "inherit",
+                }}>
+                  Export PNG
+                </button>
+              )}
             </div>
             {palette.length === 0 ? (
               <div style={{ color: T.faint, fontSize: 12, fontStyle: "italic" }}>
