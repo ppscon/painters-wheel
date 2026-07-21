@@ -77,6 +77,7 @@ export default function App() {
   const [munsellJump, setMunsellJump] = useState(null);
   const [shareMsg, setShareMsg] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [paletteSheet, setPaletteSheet] = useState(null);
   const [uploadSource, setUploadSource] = useState(null);
   const [uploadName, setUploadName] = useState(null);
 
@@ -133,12 +134,19 @@ export default function App() {
     tab === "upload" && clusterHex ? "Dominant cluster from your image" : null;
 
 
+  const clearPins = (key) => {
+    if (!pins[key] || !pins[key].length) return;
+    setPinHistory((h) => [...h.slice(-19), { type: "clear", key, pins: pins[key] }]);
+    setPins({ ...pins, [key]: [] });
+    setActivePin((ap) => (ap && ap.ctx === key ? null : ap));
+  };
   const undoPin = useCallback(() => {
     if (!pinHistory.length) return;
     const op = pinHistory[pinHistory.length - 1];
     setPinHistory(pinHistory.slice(0, -1));
     setPins((prev) => {
       const list = prev[op.key] || [];
+      if (op.type === "clear") return { ...prev, [op.key]: op.pins };
       return op.type === "add"
         ? { ...prev, [op.key]: list.filter((p) => p.id !== op.pin.id) }
         : { ...prev, [op.key]: [...list, op.pin].sort((a, b) => a.num - b.num) };
@@ -233,7 +241,8 @@ export default function App() {
       <style>{`
         .display { font-family: 'Cormorant Garamond', Georgia, serif; }
         .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
-        button:focus-visible, label:focus-visible { outline: 2px solid ${T.ochre}; outline-offset: 2px; }
+        button:focus-visible, label:focus-visible, canvas:focus-visible, input:focus-visible { outline: 2px solid ${T.ochre}; outline-offset: 2px; }
+        svg path:focus-visible { outline: none; stroke: ${T.bone}; stroke-width: 3; }
         @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
         @media (max-width: 900px) { .pw-main { grid-template-columns: 1fr !important; padding-bottom: 86px !important; } }
         .pw-mobile-readout { display: none; }
@@ -271,9 +280,10 @@ export default function App() {
         </button>
       </header>
 
-      <nav style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", borderBottom: `1px solid ${T.line}` }}>
+      <nav aria-label="Sections" style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", borderBottom: `1px solid ${T.line}` }}>
         {TABS.map(([k, label]) => (
-          <button key={k} onClick={() => { setTab(k); setViewHex(null); }} style={{
+          <button key={k} aria-current={tab === k ? "page" : undefined}
+            onClick={() => { setTab(k); setViewHex(null); }} style={{
             padding: "13px 22px", background: "transparent", border: "none",
             borderBottom: `2px solid ${tab === k ? T.ochre : "transparent"}`,
             color: tab === k ? T.bone : T.muted, cursor: "pointer",
@@ -303,7 +313,8 @@ export default function App() {
               onNewImage={clearUploadPins}
               source={uploadSource} setSource={setUploadSource}
               fileName={uploadName} setFileName={setUploadName}
-              setSampled={(h) => { setClusterHex(h); setActivePin(null); setViewHex(null); }} />
+              setSampled={(h) => { setClusterHex(h); setActivePin(null); setViewHex(null); }}
+              onPaletteSheet={setPaletteSheet} />
           )}
           {tab === "zorn" && (
             <ZornView activeBox={activeBox} setSampled={(h) => { setZornHex(h); setViewHex(null); setActivePin(null); }} />
@@ -328,14 +339,22 @@ export default function App() {
                   Pinned colours
                 </span>
                 {pinHistory.length > 0 && (
-                  <button onClick={undoPin} title="Undo last pin (Ctrl+Z)" style={{
+                  <button onClick={undoPin} title="Undo last pin (Ctrl+Z)" aria-label="Undo last pin action" style={{
                     fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.faint,
                     background: "transparent", border: `1px dashed ${T.line}`, borderRadius: 3,
-                    padding: "3px 8px", cursor: "pointer", fontFamily: "inherit", marginRight: 6,
+                    padding: "6px 9px", cursor: "pointer", fontFamily: "inherit", marginRight: 6,
                   }}>
                     Undo
                   </button>
                 )}
+                <button onClick={() => clearPins(ctxKey)} aria-label="Remove all pins and start again"
+                  title="Remove all pins (undoable)" style={{
+                    fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.faint,
+                    background: "transparent", border: `1px dashed ${T.line}`, borderRadius: 3,
+                    padding: "6px 9px", cursor: "pointer", fontFamily: "inherit", marginRight: 6,
+                  }}>
+                  Clear all
+                </button>
                 {tab === "lessons" && ctxPins.length > 0 && (
                   <button onClick={shareStudy} style={{
                     fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.ochre,
@@ -383,16 +402,18 @@ export default function App() {
                       {labToMunsell(rgbToLab(...hexToRgb(p.hex)))}
                     </span>
                   </button>
-                  <button onClick={() => setEditingPin(editingPin === p.id ? null : p.id)} title="Label pin" style={{
-                    background: "transparent", border: "none", color: T.faint,
-                    cursor: "pointer", fontSize: 12, padding: "0 2px", fontFamily: "inherit",
-                  }}>
+                  <button onClick={() => setEditingPin(editingPin === p.id ? null : p.id)}
+                    title="Label pin" aria-label={`Label pin ${p.num}`} style={{
+                      background: "transparent", border: "none", color: T.faint,
+                      cursor: "pointer", fontSize: 13, padding: "8px 7px", fontFamily: "inherit",
+                    }}>
                     {"\u270e"}
                   </button>
-                  <button onClick={() => deletePin(ctxKey, p.id)} title="Remove pin" style={{
-                    background: "transparent", border: "none", color: T.faint,
-                    cursor: "pointer", fontSize: 14, padding: "0 2px", fontFamily: "inherit",
-                  }}>
+                  <button onClick={() => deletePin(ctxKey, p.id)}
+                    title="Remove pin" aria-label={`Remove pin ${p.num}`} style={{
+                      background: "transparent", border: "none", color: T.faint,
+                      cursor: "pointer", fontSize: 16, padding: "8px 9px", fontFamily: "inherit",
+                    }}>
                     ×
                   </button>
                 </div>
@@ -439,10 +460,11 @@ export default function App() {
             ) : (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {palette.map((h) => (
-                  <button key={h} onClick={() => setViewHex(h)} title={h} style={{
-                    width: 34, height: 34, borderRadius: 4, background: h, cursor: "pointer",
-                    border: `2px solid ${viewHex === h ? T.bone : T.line}`, padding: 0,
-                  }} />
+                  <button key={h} onClick={() => setViewHex(h)} title={h}
+                    aria-label={`Preview saved colour ${h}`} aria-pressed={viewHex === h} style={{
+                      width: 40, height: 40, borderRadius: 4, background: h, cursor: "pointer",
+                      border: `2px solid ${viewHex === h ? T.bone : T.line}`, padding: 0,
+                    }} />
                 ))}
                 <button onClick={() => { setPalette([]); setViewHex(null); }} style={{
                   fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.faint,
@@ -467,6 +489,11 @@ export default function App() {
       {sheetOpen && sheetImage && ctxPins.length > 0 && (
         <StudySheet title={sheetTitle} subtitle={sheetSubtitle} image={sheetImage}
           pins={ctxPins} activeBox={activeBox} onClose={() => setSheetOpen(false)} />
+      )}
+      {paletteSheet && uploadSource && (
+        <StudySheet title={uploadName || "Your canvas"} subtitle="Colours in use · dominant clusters"
+          image={uploadSource.url} pins={paletteSheet} activeBox={activeBox}
+          onClose={() => setPaletteSheet(null)} />
       )}
     </div>
   );

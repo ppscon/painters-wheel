@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { T } from "./ui.jsx";
 import { SamplerCanvas } from "./SamplerCanvas.jsx";
 /* ---------------- Your canvas (upload + analysis) view ------------ */
-function UploadView({ pins, activePinId, onAddPin, onSelectPin, onNewImage, setSampled, source, setSource, fileName, setFileName }) {
+function UploadView({ pins, activePinId, onAddPin, onSelectPin, onNewImage, setSampled, source, setSource, fileName, setFileName, onPaletteSheet }) {
   const [autoPalette, setAutoPalette] = useState([]);
   const onPalette = useCallback((p) => setAutoPalette(p), []);
   const onFile = (e) => {
@@ -56,10 +56,11 @@ function UploadView({ pins, activePinId, onAddPin, onSelectPin, onNewImage, setS
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
                 {autoPalette.map((c, i) => (
-                  <button key={i} onClick={() => setSampled(c.hex)} title={c.hex} style={{
-                    background: "transparent", border: "none", padding: 0,
-                    cursor: "pointer", textAlign: "center", fontFamily: "inherit",
-                  }}>
+                  <button key={i} onClick={() => setSampled(c.hex)} title={c.hex}
+                    aria-label={`Dominant colour ${i + 1}, ${c.hex}, ${c.pct.toFixed(0)}% of the surface`} style={{
+                      background: "transparent", border: "none", padding: 0,
+                      cursor: "pointer", textAlign: "center", fontFamily: "inherit",
+                    }}>
                     <div style={{
                       width: 52, height: 52, borderRadius: 5, background: c.hex,
                       border: `1px solid ${T.line}`,
@@ -74,6 +75,20 @@ function UploadView({ pins, activePinId, onAddPin, onSelectPin, onNewImage, setS
                 Eight clusters computed by k-means in Lab space; percentages show coverage of the
                 picture surface. Click a swatch for its record, or drop pins on specific passages.
               </p>
+              {onPaletteSheet && (
+                <button
+                  onClick={() => onPaletteSheet(autoPalette.map((c, i) => ({
+                    id: 100000 + i, num: i + 1, hex: c.hex,
+                    label: `${c.pct.toFixed(0)}% of the surface`,
+                  })))}
+                  style={{
+                    marginTop: 4, padding: "8px 16px", fontSize: 11, letterSpacing: 1.5,
+                    textTransform: "uppercase", background: "transparent", color: T.ochre,
+                    border: `1px solid ${T.ochre}`, borderRadius: 3, cursor: "pointer", fontFamily: "inherit",
+                  }}>
+                  Study sheet of these colours
+                </button>
+              )}
             </div>
           )}
         </div>
