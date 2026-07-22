@@ -22,6 +22,7 @@ const PaintboxView = lazy(() => import("./components/PaintboxView.jsx").then((m)
 const ShoppingListView = lazy(() => import("./components/ShoppingListView.jsx").then((m) => ({ default: m.ShoppingListView })));
 const StudySheet = lazy(() => import("./components/StudySheet.jsx").then((m) => ({ default: m.StudySheet })));
 const HelpOverlay = lazy(() => import("./components/HelpOverlay.jsx").then((m) => ({ default: m.HelpOverlay })));
+const GuideView = lazy(() => import("./components/GuideView.jsx").then((m) => ({ default: m.GuideView })));
 
 function TabLoading() {
   return (
@@ -436,6 +437,7 @@ export default function App() {
     ["zorn", "Zorn Palette"],
     ["box", "Paintbox"],
     ["shop", "Shopping List"],
+    ["guide", "Guide"],
   ];
 
   return (
@@ -547,6 +549,7 @@ export default function App() {
           {tab === "box" && (
             <PaintboxView box={box} setBox={setBox} boxOnly={boxOnly} setBoxOnly={setBoxOnly} calib={calib} setCalib={setCalib} />
           )}
+          {tab === "guide" && <GuideView munsellLoaded={munsellLoaded} />}
           </Suspense>
         </section>
 
@@ -736,7 +739,7 @@ export default function App() {
           </p>
         </aside>
       </main>
-      {activeHex && tab !== "box" && tab !== "shop" && <MobileReadout hex={activeHex} activeBox={activeBox} calib={calib} recordRef={recordRef} />}
+      {activeHex && tab !== "box" && tab !== "shop" && tab !== "guide" && <MobileReadout hex={activeHex} activeBox={activeBox} calib={calib} recordRef={recordRef} />}
       <Suspense fallback={null}>
         {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
         {sheetOpen && sheetImage && ctxPins.length > 0 && (

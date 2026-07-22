@@ -13,8 +13,16 @@ describe("App smoke render", () => {
   it("switches to every tab without crashing", async () => {
     const { default: App } = await import("../src/App.jsx");
     render(<App />);
-    for (const label of ["Your Canvas", "Colour Wheel", "Zorn Palette", "Paintbox", "Lessons"]) {
+    for (const label of ["Your Canvas", "Colour Wheel", "Zorn Palette", "Paintbox", "Shopping List", "Guide", "Lessons"]) {
       fireEvent.click(screen.getAllByText(label)[0]);
     }
+  });
+
+  it("renders the Guide tab's lazy content", async () => {
+    const { default: App } = await import("../src/App.jsx");
+    render(<App />);
+    fireEvent.click(screen.getAllByText("Guide")[0]);
+    expect(await screen.findByText("How everything works")).toBeTruthy();
+    expect(await screen.findByText("Tube calibration")).toBeTruthy();
   });
 });

@@ -71,7 +71,8 @@ function HelpOverlay({ onClose }) {
         </div>
         <p style={{ color: T.faint, fontSize: 11, lineHeight: 1.55, marginTop: 12 }}>
           Look for the small ? markers throughout the app; each explains the term or number it
-          sits beside.
+          sits beside. The Guide tab holds the full manual, with worked examples computed by the
+          app's own colour engine.
         </p>
       </div>
     </div>
