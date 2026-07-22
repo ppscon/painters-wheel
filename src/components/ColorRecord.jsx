@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { T, SectionRule, Tip } from "./ui.jsx";
 import { computeRecord, paintPool } from "../color/paints.js";
-import { buildLadder, bestRung, bestCorrection } from "../color/mixlab.js";
+import { buildLadder, bestRung, bestAxisCorrection, axisReport } from "../color/mixlab.js";
 import { hexToRgb, rgbToLab, deltaE2000 } from "../color/math.js";
 /* ---------------- Colour record --------------------------------- */
 function useColorRecord(hex, activeBox, calib) {
@@ -17,6 +17,29 @@ const TINT_ROUTE = {
   mid: "Closest at its mid tint — begin near equal paint and white.",
   pale: "Closest at its pale tint — a little paint in plenty of white.",
 };
+
+const AXIS_OPTS = [["overall", "Overall"], ["value", "Value"], ["hue", "Hue"], ["chroma", "Chroma"]];
+
+function axisDeltaLabel(axis, report) {
+  if (axis === "value") return `${report.value >= 0 ? "+" : "−"}${Math.abs(report.value).toFixed(1)}`;
+  if (axis === "hue") return report.hue.toFixed(1);
+  if (axis === "chroma") return `${report.chroma >= 0 ? "+" : "−"}${Math.abs(report.chroma).toFixed(1)}`;
+  return null;
+}
+
+function axisGuidance(axis, report) {
+  if (axis === "overall") return "Searching all axes at once for the smallest overall ΔE.";
+  if (report.aligned[axis]) {
+    return report.suggest
+      ? `${axis[0].toUpperCase()}${axis.slice(1)} is already aligned — hold it and correct ${report.suggest} next.`
+      : "All three axes are within reach — finish by eye.";
+  }
+  if (axis === "value") return `${Math.abs(report.value).toFixed(1)} value steps too ${report.value > 0 ? "dark" : "light"} — the search moves value while holding hue and chroma.`;
+  if (axis === "hue") return `Hue is ${report.hue.toFixed(1)} steps off — the search rotates hue while holding value and chroma.`;
+  return report.chroma > 0
+    ? `${report.chroma.toFixed(1)} chroma steps too muted — the search builds chroma while holding value and hue.`
+    : `${Math.abs(report.chroma).toFixed(1)} chroma steps too intense — the search neutralises while holding value and hue.`;
+}
 
 /* The graded ladder: one recommended mix as physical piles at fixed
    ratios, each rung with its predicted colour, Munsell notation and
@@ -81,10 +104,19 @@ function MixLadder({ source, adjuster, targetLab }) {
 function MixLab({ rec, activeBox, calib, mixLog, onRecordMix, onClearMixLog }) {
   const [sample, setSample] = useState(rec.hex);
   const [obsHex, setObsHex] = useState(null);
+  const [axis, setAxis] = useState("overall");
   const pool = useMemo(() => paintPool(activeBox, calib), [activeBox, calib]);
+  const report = useMemo(
+    () => (obsHex ? axisReport(rgbToLab(...hexToRgb(obsHex)), rec.lab) : null),
+    [obsHex, rec.lab]
+  );
   const correction = useMemo(
-    () => (obsHex ? bestCorrection(obsHex, rec.lab, pool) : null),
-    [obsHex, rec.lab, pool]
+    () => (obsHex ? bestAxisCorrection(obsHex, rec.lab, pool, axis) : null),
+    [obsHex, rec.lab, pool, axis]
+  );
+  const landed = useMemo(
+    () => (correction && axis !== "overall" ? axisReport(rgbToLab(...hexToRgb(correction.hex)), rec.lab) : null),
+    [correction, axis, rec.lab]
   );
   const source = obsHex
     ? { x: obsHex, n: "Your palette sample", m: null }
@@ -123,28 +155,75 @@ function MixLab({ rec, activeBox, calib, mixLog, onRecordMix, onClearMixLog }) {
           Record mix
         </button>
       </div>
-      {obsHex && (
+      {obsHex && report && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 11, color: T.faint, lineHeight: 1.5, marginBottom: 6 }}>
+            Correct one dimension at a time — value first, then hue, then chroma
+            <Tip text={"The classical discipline: hold two dimensions steady and move one. Pick an axis and the correction search favours additions that advance it toward the target while barely disturbing the other two. Overall searches all three at once for the smallest ΔE."} />
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {AXIS_OPTS.map(([key, label]) => {
+              const on = axis === key;
+              const suggested = report.suggest === key;
+              const delta = axisDeltaLabel(key, report);
+              return (
+                <button key={key} onClick={() => setAxis(key)} aria-pressed={on} style={{
+                  flex: "1 1 0", minWidth: 58, padding: "6px 4px", borderRadius: 3,
+                  cursor: "pointer", fontFamily: "inherit", textAlign: "center",
+                  background: on ? T.ochre : "transparent",
+                  color: on ? T.ground : T.muted,
+                  border: `1px ${!on && suggested ? "dashed" : "solid"} ${on || suggested ? T.ochre : T.line}`,
+                }}>
+                  <span style={{ display: "block", fontSize: 10, letterSpacing: 1, textTransform: "uppercase" }}>
+                    {label}{suggested && !on ? " ·" : ""}
+                  </span>
+                  {delta && (
+                    <span className="mono" style={{ display: "block", fontSize: 9, marginTop: 1, color: on ? T.ground : T.faint }}>
+                      {delta}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {axis !== "overall" && (
+            <div className="mono" style={{ fontSize: 9, color: T.faint, letterSpacing: 0.5, marginTop: 5 }}>
+              {["value", "hue", "chroma"].map((a) => `${a} ${a === axis ? "moves" : "held"}`).join(" · ")}
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, marginTop: 5 }}>
+            {axisGuidance(axis, report)}
+          </div>
         <div style={{
-          marginTop: 6, fontSize: 12, color: T.bone, background: T.panel,
+          marginTop: 8, fontSize: 12, color: T.bone, background: T.panel,
           border: `1px solid ${T.line}`, borderLeft: `3px solid ${T.ochre}`,
           padding: "8px 10px", borderRadius: 3, lineHeight: 1.55,
         }}>
           {correction ? (
             <span>
               Correcting from your sample: add {correction.paint.n}
-              <span style={{ color: T.faint }}> ({correction.paint.m})</span> at {correction.ratio} —
-              predicted ΔE {correction.dE.toFixed(1)}. The ladder above now walks that addition.
+              <span style={{ color: T.faint }}> ({correction.paint.m})</span> at {correction.ratio} —{" "}
+              {landed ? (
+                <span>
+                  {axis} lands {(axis === "hue" ? landed.hue : Math.abs(landed[axis])).toFixed(1)} steps
+                  from target (overall ΔE {correction.dE.toFixed(1)} until the other axes are corrected).
+                </span>
+              ) : (
+                <span>predicted ΔE {correction.dE.toFixed(1)}.</span>
+              )}{" "}
+              The ladder above now walks that addition.
             </span>
           ) : (
             <span>Recorded. No corrective tube found in the current pool.</span>
           )}
-          <button onClick={() => setObsHex(null)} style={{
+          <button onClick={() => { setObsHex(null); setAxis("overall"); }} style={{
             display: "block", marginTop: 6, fontSize: 10, letterSpacing: 1, textTransform: "uppercase",
             color: T.faint, background: "transparent", border: `1px dashed ${T.line}`,
             borderRadius: 3, padding: "4px 8px", cursor: "pointer", fontFamily: "inherit",
           }}>
             Back to the recommendation
           </button>
+        </div>
         </div>
       )}
       {mixLog.length > 0 && (

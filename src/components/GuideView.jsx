@@ -187,6 +187,14 @@ function GuideView({ munsellLoaded }) {
           your pool at every ladder ratio for the single addition that closes the remaining gap,
           and the ladder re-grades from reality instead of prediction.
         </P>
+        <P>
+          The correction can also be held to <strong style={{ color: T.bone }}>one axis at a
+          time</strong> — the classical order: value first, then hue, then chroma. Axis buttons
+          appear once an observation is recorded, each showing how far off that dimension sits;
+          the suggested first correction is marked. With an axis chosen, the search favours
+          additions that move that dimension toward the target while barely disturbing the two
+          held ones, and tells you when an axis is already aligned so you can move to the next.
+        </P>
         <Callout>
           Worked example, computed live: chasing <Swatch hex={EX_TARGET} />{" "}
           <span className="mono">{EX_TARGET}</span> you mix{" "}
