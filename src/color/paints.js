@@ -84,8 +84,52 @@ const PAINTS = [
 const PAINT_LABS = PAINTS.map((pt) => ({ ...pt, lab: rgbToLab(...hexToRgb(pt.x)) }));
 const MIXERS = PAINT_LABS.filter((p) => /White|Black/.test(p.n));
 
-function bestMixFor(targetLab, sortedAll, activeBox) {
-  const mixers = activeBox ? MIXERS.filter((p) => activeBox.has(p.m + "::" + p.n)) : MIXERS;
+/* Personal tube calibration: a map of "Maker::Name" -> {masstone,
+   midTint, paleTint} measured by the painter. A calibrated masstone
+   replaces the catalogue hex everywhere (catalogue kept as catalogX),
+   so matching and mixing automatically use the tube's real colour;
+   the two tints make matching tint-aware. Memoised on the calib
+   object's identity — App state replaces it wholesale on change. */
+let CAL_CACHE = { calib: null, list: PAINT_LABS };
+function applyCalibration(calib) {
+  if (!calib || typeof calib !== "object" || !Object.keys(calib).length) return PAINT_LABS;
+  if (CAL_CACHE.calib === calib) return CAL_CACHE.list;
+  const list = PAINT_LABS.map((pt) => {
+    const c = calib[pt.m + "::" + pt.n];
+    if (!c) return pt;
+    return {
+      ...pt,
+      catalogX: pt.x,
+      x: c.masstone,
+      lab: rgbToLab(...hexToRgb(c.masstone)),
+      calibrated: true,
+      tints: [
+        { type: "mid", x: c.midTint, lab: rgbToLab(...hexToRgb(c.midTint)) },
+        { type: "pale", x: c.paleTint, lab: rgbToLab(...hexToRgb(c.paleTint)) },
+      ],
+    };
+  });
+  CAL_CACHE = { calib, list };
+  return list;
+}
+
+/* Closest of a paint's known swatches (masstone always; mid and pale
+   tints when calibrated). matchX/matchType say which swatch matched,
+   so the record can advise a dilution route toward white. */
+function swatchMatch(lab, pt) {
+  let dE = deltaE2000(lab, pt.lab), matchType = "masstone", matchX = pt.x;
+  if (pt.tints) {
+    for (const t of pt.tints) {
+      const d = deltaE2000(lab, t.lab);
+      if (d < dE) { dE = d; matchType = t.type; matchX = t.x; }
+    }
+  }
+  return { dE, matchType, matchX };
+}
+
+function bestMixFor(targetLab, sortedAll, activeBox, calib) {
+  const allMixers = applyCalibration(calib).filter((p) => /White|Black/.test(p.n));
+  const mixers = activeBox ? allMixers.filter((p) => activeBox.has(p.m + "::" + p.n)) : allMixers;
   const pool = [...sortedAll.slice(0, 10), ...mixers];
   const seen = new Set();
   const cands = pool.filter((p) => {
@@ -108,18 +152,19 @@ function bestMixFor(targetLab, sortedAll, activeBox) {
 }
 
 
-function paintPool(activeBox) {
-  if (!activeBox) return PAINT_LABS;
-  const p = PAINT_LABS.filter((pt) => activeBox.has(pt.m + "::" + pt.n));
-  return p.length ? p : PAINT_LABS;
+function paintPool(activeBox, calib) {
+  const base = applyCalibration(calib);
+  if (!activeBox) return base;
+  const p = base.filter((pt) => activeBox.has(pt.m + "::" + pt.n));
+  return p.length ? p : base;
 }
 
-function nearestPaint(hex, activeBox) {
+function nearestPaint(hex, activeBox, calib) {
   const lab = rgbToLab(...hexToRgb(hex));
   let best = null;
-  for (const pt of paintPool(activeBox)) {
-    const dE = deltaE2000(lab, pt.lab);
-    if (!best || dE < best.dE) best = { ...pt, dE };
+  for (const pt of paintPool(activeBox, calib)) {
+    const m = swatchMatch(lab, pt);
+    if (!best || m.dE < best.dE) best = { ...pt, ...m };
   }
   return best;
 }
@@ -128,24 +173,24 @@ function nearestPaint(hex, activeBox) {
    this chip straight from a tube (dE < 6), with a two-paint mix, or
    not at all? dE 6 is the record panel's "close, adjust slightly"
    boundary — beyond it a painter would call the chip out of reach. */
-function classifyGamut(hex, activeBox) {
+function classifyGamut(hex, activeBox, calib) {
   const lab = rgbToLab(...hexToRgb(hex));
-  const all = paintPool(activeBox).map((pt) => ({ ...pt, dE: deltaE2000(lab, pt.lab) })).sort((a, b) => a.dE - b.dE);
+  const all = paintPool(activeBox, calib).map((pt) => ({ ...pt, dE: deltaE2000(lab, pt.lab) })).sort((a, b) => a.dE - b.dE);
   if (all[0].dE < 6) return { kind: "tube", paint: all[0], dE: all[0].dE };
-  const mix = all.length >= 2 ? bestMixFor(lab, all, activeBox) : null;
+  const mix = all.length >= 2 ? bestMixFor(lab, all, activeBox, calib) : null;
   if (mix && mix.dE < 6) return { kind: "mix", mix, dE: mix.dE };
   return { kind: "out", dE: Math.min(all[0].dE, mix ? mix.dE : Infinity) };
 }
 
-function computeRecord(hex, activeBox) {
+function computeRecord(hex, activeBox, calib) {
   const rgb = hexToRgb(hex);
   const lab = rgbToLab(...rgb);
   const munsell = labToMunsell(lab);
-  const all = paintPool(activeBox).map((pt) => ({ ...pt, dE: deltaE2000(lab, pt.lab) })).sort((a, b) => a.dE - b.dE);
+  const all = paintPool(activeBox, calib).map((pt) => ({ ...pt, ...swatchMatch(lab, pt) })).sort((a, b) => a.dE - b.dE);
   const matches = all.slice(0, 3);
-  const mix = matches[0].dE > 2.5 && all.length >= 2 ? bestMixFor(lab, all, activeBox) : null;
+  const mix = matches[0].dE > 2.5 && all.length >= 2 ? bestMixFor(lab, all, activeBox, calib) : null;
   const theory = theoryGuidance(lab);
   return { hex, rgb, lab, munsell, matches, mix, theory };
 }
 
-export { PAINTS, PAINT_LABS, MIXERS, bestMixFor, paintPool, nearestPaint, computeRecord, classifyGamut };
+export { PAINTS, PAINT_LABS, MIXERS, applyCalibration, bestMixFor, paintPool, nearestPaint, computeRecord, classifyGamut };

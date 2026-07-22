@@ -6,7 +6,7 @@ import { mixMulti } from "../color/km.js";
 import { RYB, HARMONIES } from "../color/ryb.js";
 import { nearestPaint, classifyGamut } from "../color/paints.js";
 import { ZHEX } from "../data/zorn.js";
-function MunsellExplorer({ onPick, jump, activeBox }) {
+function MunsellExplorer({ onPick, jump, activeBox, calib }) {
   const [hueIdx, setHueIdx] = useState(29);
   const [showGamut, setShowGamut] = useState(false);
   useEffect(() => { if (jump) setHueIdx(jump.idx); }, [jump]);
@@ -18,11 +18,11 @@ function MunsellExplorer({ onPick, jump, activeBox }) {
     const m = {};
     for (const p of pts) {
       const { hex } = labToRgbHex(p.L, p.a, p.b);
-      m[`${p.v}_${p.c}`] = classifyGamut(hex, activeBox);
+      m[`${p.v}_${p.c}`] = classifyGamut(hex, activeBox, calib);
     }
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showGamut, hueIdx, activeBox]);
+  }, [showGamut, hueIdx, activeBox, calib]);
   const values = [...new Set(pts.map((p) => p.v))].sort((x, y) => y - x);
   const maxC = pts.reduce((m, p) => Math.max(m, p.c), 2);
   const chromas = [];
@@ -136,7 +136,7 @@ function MunsellExplorer({ onPick, jump, activeBox }) {
 }
 
 /* ---------------- Colour wheel view ------------------------------ */
-function WheelView({ selected, setSelected, activeBox, munsellJump }) {
+function WheelView({ selected, setSelected, activeBox, calib, munsellJump }) {
   const size = 480, cx = size / 2, cy = size / 2;
   const rOut = 210, rIn = 118;
   const [harmony, setHarmony] = useState("complement");
@@ -185,7 +185,7 @@ function WheelView({ selected, setSelected, activeBox, munsellJump }) {
   const lab = working ? rgbToLab(...hexToRgb(working)) : null;
   const chroma = lab ? Math.hypot(lab[1], lab[2]) : 0;
   const value = lab ? lab[0] / 10 : 0;
-  const near = working ? nearestPaint(working, activeBox) : null;
+  const near = working ? nearestPaint(working, activeBox, calib) : null;
   const chromaWord = chroma < 8 ? "neutralised" : chroma < 25 ? "muted" : "full voice";
 
   const segPath = (i) => {
@@ -235,7 +235,7 @@ function WheelView({ selected, setSelected, activeBox, munsellJump }) {
         ))}
       </div>
       {mode === "munsell" ? (
-        <MunsellExplorer onPick={(h) => setSelected(h)} jump={munsellJump} activeBox={activeBox} />
+        <MunsellExplorer onPick={(h) => setSelected(h)} jump={munsellJump} activeBox={activeBox} calib={calib} />
       ) : (
       <>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>

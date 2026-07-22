@@ -6,9 +6,9 @@ const SHEET = {
   paper: "#FBF7EE", ink: "#2B241A", sub: "#6E6350",
   line: "#D8CFBC", accent: "#8A6614",
 };
-function StudySheet({ title, subtitle, image, pins, activeBox, onClose }) {
+function StudySheet({ title, subtitle, image, pins, activeBox, calib, onClose }) {
   const dialogRef = useModalDialog(onClose);
-  const recs = pins.map((p) => ({ p, r: computeRecord(p.hex, activeBox) }));
+  const recs = pins.map((p) => ({ p, r: computeRecord(p.hex, activeBox, calib) }));
   const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   return (
     <div className="pw-sheet-overlay" onClick={onClose} style={{

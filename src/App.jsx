@@ -38,9 +38,9 @@ import { makeSyncCode, normaliseSyncCode, getStoredSyncCode, storeSyncCode, sync
    sits below the painting: swatch, notation and nearest tube at a
    glance, one tap to scroll to the record itself. Hidden ≥ 900px via
    the .pw-mobile-readout media rule. */
-function MobileReadout({ hex, activeBox, recordRef }) {
+function MobileReadout({ hex, activeBox, calib, recordRef }) {
   const munsell = useMemo(() => labToMunsell(rgbToLab(...hexToRgb(hex))), [hex]);
-  const paint = useMemo(() => nearestPaint(hex, activeBox), [hex, activeBox]);
+  const paint = useMemo(() => nearestPaint(hex, activeBox, calib), [hex, activeBox, calib]);
   return (
     <div className="pw-mobile-readout" style={{
       position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 40,
@@ -89,12 +89,12 @@ function SyncPanel({ code, state, onCreate, onConnect, onDisconnect }) {
     <div style={{ background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, padding: 18, marginTop: 16 }}>
       <div style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", color: T.ochre, marginBottom: 8 }}>
         Sync across devices
-        <Tip text="Pins, saved palette, paintbox and shopping list sync through a private code — no account, no email. Anyone with the code can read and change this data, so treat it like a key. Images never leave the device. Last write wins if two devices change things at once." side="bottom" />
+        <Tip text="Pins, saved palette, paintbox, tube calibrations, mix observations and shopping list sync through a private code — no account, no email. Anyone with the code can read and change this data, so treat it like a key. Images never leave the device. Last write wins if two devices change things at once." side="bottom" />
       </div>
       {!code ? (
         <div>
           <p style={{ color: T.faint, fontSize: 12, lineHeight: 1.6, margin: "0 0 10px" }}>
-            Carry your pins, palette, paintbox and shopping list to your tablet or phone.
+            Carry your pins, palette, paintbox, calibrations and shopping list to your tablet or phone.
           </p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button onClick={onCreate} style={{ ...small, color: T.ochre, border: `1px solid ${T.ochre}` }}>
@@ -169,7 +169,11 @@ export default function App() {
   const [viewHex, setViewHex] = useState(null);
   const [box, setBox] = useState(saved.box);
   const [boxOnly, setBoxOnly] = useState(saved.boxOnly);
+  const [calib, setCalib] = useState(saved.calib);
+  const [mixLog, setMixLog] = useState(saved.mixLog);
   const activeBox = boxOnly && box.size >= 2 ? box : null;
+  const recordMix = useCallback((obs) => setMixLog((l) => [obs, ...l].slice(0, 12)), []);
+  const clearMixLog = useCallback(() => setMixLog([]), []);
   const [helpOpen, setHelpOpen] = useState(false);
   const [pinHistory, setPinHistory] = useState([]);
   const [editingPin, setEditingPin] = useState(null);
@@ -229,9 +233,9 @@ export default function App() {
   useEffect(() => {
     if (!PW_STORE) return;
     try {
-      PW_STORE.setItem(PW_KEY, JSON.stringify({ pins: { ...pins, upload: [] }, palette, box: [...box], boxOnly, shop }));
+      PW_STORE.setItem(PW_KEY, JSON.stringify({ pins: { ...pins, upload: [] }, palette, box: [...box], boxOnly, shop, calib, mixLog }));
     } catch (e) { /* storage full or unavailable; persistence is best-effort */ }
-  }, [pins, palette, box, boxOnly, shop]);
+  }, [pins, palette, box, boxOnly, shop, calib, mixLog]);
 
   /* -------- cross-device sync (see state/sync.js for the model) ---- */
   const [syncCode, setSyncCode] = useState(() => getStoredSyncCode());
@@ -243,6 +247,8 @@ export default function App() {
     setBox(clean.box);
     setBoxOnly(clean.boxOnly);
     setShop(clean.shop);
+    setCalib(clean.calib);
+    setMixLog(clean.mixLog);
     setActivePin(null);
   }, []);
   useEffect(() => {
@@ -264,17 +270,17 @@ export default function App() {
     clearTimeout(pushTimer.current);
     pushTimer.current = setTimeout(() => {
       setSyncState((s) => ({ ...s, status: "syncing" }));
-      syncPut(syncCode, { pins: { ...pins, upload: [] }, palette, box: [...box], boxOnly, shop })
+      syncPut(syncCode, { pins: { ...pins, upload: [] }, palette, box: [...box], boxOnly, shop, calib, mixLog })
         .then((ts) => setSyncState({ status: "synced", at: ts }))
         .catch(() => setSyncState({ status: "error", at: null }));
     }, 1500);
     return () => clearTimeout(pushTimer.current);
-  }, [pins, palette, box, boxOnly, shop, syncCode]);
+  }, [pins, palette, box, boxOnly, shop, calib, mixLog, syncCode]);
   const startSync = () => {
     const code = makeSyncCode();
     storeSyncCode(code);
     setSyncState({ status: "syncing", at: null });
-    syncPut(code, { pins: { ...pins, upload: [] }, palette, box: [...box], boxOnly, shop })
+    syncPut(code, { pins: { ...pins, upload: [] }, palette, box: [...box], boxOnly, shop, calib, mixLog })
       .then((ts) => setSyncState({ status: "synced", at: ts }))
       .catch(() => setSyncState({ status: "error", at: null }));
     setSyncCode(code);
@@ -509,7 +515,7 @@ export default function App() {
         <section style={{ background: T.panel, border: `1px solid ${T.line}`, borderRadius: 6, padding: 20 }}>
           <Suspense fallback={<TabLoading />}>
           {tab === "wheel" && (
-            <WheelView activeBox={activeBox} munsellJump={munsellJump} selected={wheelHex} setSelected={(h) => { setWheelHex(h); setViewHex(null); }} />
+            <WheelView activeBox={activeBox} calib={calib} munsellJump={munsellJump} selected={wheelHex} setSelected={(h) => { setWheelHex(h); setViewHex(null); }} />
           )}
           {tab === "lessons" && (
             <LessonsView lessonId={lessonId} setLessonId={setLessonId}
@@ -529,7 +535,7 @@ export default function App() {
               autoPalette={uploadPalette} onPalette={onUploadPalette} />
           )}
           {tab === "zorn" && (
-            <ZornView activeBox={activeBox} setSampled={(h) => { setZornHex(h); setViewHex(null); setActivePin(null); }} />
+            <ZornView activeBox={activeBox} calib={calib} setSampled={(h) => { setZornHex(h); setViewHex(null); setActivePin(null); }} />
           )}
           {tab === "shop" && (
             <ShoppingListView targets={shop.targets} name={shop.name} ticked={shop.ticked} box={box}
@@ -539,7 +545,7 @@ export default function App() {
               }))} />
           )}
           {tab === "box" && (
-            <PaintboxView box={box} setBox={setBox} boxOnly={boxOnly} setBoxOnly={setBoxOnly} />
+            <PaintboxView box={box} setBox={setBox} boxOnly={boxOnly} setBoxOnly={setBoxOnly} calib={calib} setCalib={setCalib} />
           )}
           </Suspense>
         </section>
@@ -549,7 +555,9 @@ export default function App() {
             <div style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", color: T.ochre, marginBottom: 12 }}>
               Colour record
             </div>
-            <ColorRecord hex={activeHex} sourceLabel={sourceLabel} onSave={save} activeBox={activeBox} onOpenMunsell={openMunsellPage} />
+            <ColorRecord hex={activeHex} sourceLabel={sourceLabel} onSave={save} activeBox={activeBox}
+              calib={calib} mixLog={mixLog} onRecordMix={recordMix} onClearMixLog={clearMixLog}
+              onOpenMunsell={openMunsellPage} />
           </div>
 
           {ctxKey && (
@@ -728,16 +736,16 @@ export default function App() {
           </p>
         </aside>
       </main>
-      {activeHex && tab !== "box" && tab !== "shop" && <MobileReadout hex={activeHex} activeBox={activeBox} recordRef={recordRef} />}
+      {activeHex && tab !== "box" && tab !== "shop" && <MobileReadout hex={activeHex} activeBox={activeBox} calib={calib} recordRef={recordRef} />}
       <Suspense fallback={null}>
         {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
         {sheetOpen && sheetImage && ctxPins.length > 0 && (
           <StudySheet title={sheetTitle} subtitle={sheetSubtitle} image={sheetImage}
-            pins={ctxPins} activeBox={activeBox} onClose={() => setSheetOpen(false)} />
+            pins={ctxPins} activeBox={activeBox} calib={calib} onClose={() => setSheetOpen(false)} />
         )}
         {paletteSheet && uploadSource && (
           <StudySheet title={uploadName || "Your canvas"} subtitle="Colours in use · dominant clusters"
-            image={uploadSource.url} pins={paletteSheet} activeBox={activeBox}
+            image={uploadSource.url} pins={paletteSheet} activeBox={activeBox} calib={calib}
             onClose={() => setPaletteSheet(null)} />
         )}
       </Suspense>

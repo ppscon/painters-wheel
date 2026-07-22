@@ -1,8 +1,126 @@
-import { T } from "./ui.jsx";
+import { useState, useEffect } from "react";
+import { T, Tip } from "./ui.jsx";
 import { PAINTS } from "../color/paints.js";
+import { calibrationDefaults } from "../color/mixlab.js";
+import { hexToRgb, rgbToLab } from "../color/math.js";
+import { labToMunsell } from "../color/munsell.js";
 /* ---------------- Paintbox ---------------------------------------- */
 const MAKERS = [...new Set(PAINTS.map((p) => p.m))];
-function PaintboxView({ box, setBox, boxOnly, setBoxOnly }) {
+
+const CAL_FIELDS = [
+  ["masstone", "Masstone", "Paint straight from the tube"],
+  ["midTint", "Mid tint", "Roughly equal paint and white"],
+  ["paleTint", "Pale tint", "A small amount of paint in white"],
+];
+
+/* Calibrate an owned tube against reality: what its masstone and two
+   standard tints actually look like, rather than the catalogue
+   approximation. Matching then tests all three swatches and mixing
+   starts from the real masstone. */
+function TubeCalibration({ box, calib, setCalib }) {
+  const owned = PAINTS.filter((p) => box.has(p.m + "::" + p.n));
+  const [selKey, setSelKey] = useState("");
+  const sel = owned.find((p) => p.m + "::" + p.n === selKey) || null;
+  const [sw, setSw] = useState(null);
+  useEffect(() => {
+    setSw(sel ? { ...(calib[selKey] || calibrationDefaults(sel.x)) } : null);
+    // Reseed only when the selection changes; a mid-edit calib update
+    // (e.g. a sync pull) must not clobber unsaved swatches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selKey]);
+  const save = () => {
+    setCalib({
+      ...calib,
+      [selKey]: {
+        masstone: sw.masstone.toUpperCase(),
+        midTint: sw.midTint.toUpperCase(),
+        paleTint: sw.paleTint.toUpperCase(),
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  };
+  const reset = () => {
+    const next = { ...calib };
+    delete next[selKey];
+    setCalib(next);
+    setSw(calibrationDefaults(sel.x));
+  };
+  return (
+    <div style={{ background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, padding: 14, marginTop: 14 }}>
+      <div style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", color: T.ochre }}>
+        Tube calibration
+        <Tip text="Squeeze out the tube, mix its two tints with titanium white, then adjust each swatch until it matches what is on your palette (a phone photo helps). Matching across the app then answers with your paint, not the catalogue, and tells you which dilution to start from." side="bottom" />
+      </div>
+      <p style={{ color: T.faint, fontSize: 12, lineHeight: 1.6, margin: "8px 0 10px" }}>
+        Teach the app what your tubes really do. {Object.keys(calib).length > 0 && (
+          <span className="mono">{Object.keys(calib).length} calibrated.</span>
+        )}
+      </p>
+      {owned.length === 0 ? (
+        <div style={{ color: T.faint, fontSize: 12, fontStyle: "italic" }}>
+          Tick the tubes you own below first — calibration applies to your own paints.
+        </div>
+      ) : (
+        <div>
+          <select value={selKey} onChange={(e) => setSelKey(e.target.value)}
+            aria-label="Choose a tube to calibrate" style={{
+              width: "100%", boxSizing: "border-box", fontSize: 12, background: T.ground,
+              color: T.bone, border: `1px solid ${T.line}`, borderRadius: 3,
+              padding: "8px 10px", fontFamily: "inherit",
+            }}>
+            <option value="">Choose a tube…</option>
+            {owned.map((p) => {
+              const key = p.m + "::" + p.n;
+              return (
+                <option key={key} value={key}>
+                  {p.n} · {p.m}{calib[key] ? " ✓" : ""}
+                </option>
+              );
+            })}
+          </select>
+          {sel && sw && (
+            <div style={{ marginTop: 10 }}>
+              {CAL_FIELDS.map(([field, label, hint]) => (
+                <div key={field} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: `1px solid ${T.line}` }}>
+                  <input type="color" value={sw[field].toLowerCase()} aria-label={`${label} swatch for ${sel.n}`}
+                    onChange={(e) => setSw({ ...sw, [field]: e.target.value.toUpperCase() })}
+                    style={{ width: 40, height: 32, padding: 0, border: `1px solid ${T.line}`, borderRadius: 4, background: T.ground, cursor: "pointer", flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: T.bone, fontSize: 12 }}>{label}</div>
+                    <div style={{ color: T.faint, fontSize: 10 }}>{hint}</div>
+                  </div>
+                  <span className="mono" style={{ fontSize: 10, color: T.muted, flexShrink: 0 }}>
+                    {labToMunsell(rgbToLab(...hexToRgb(sw[field])))}
+                  </span>
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                <button onClick={save} style={{
+                  fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.ochre,
+                  background: "transparent", border: `1px solid ${T.ochre}`, borderRadius: 3,
+                  padding: "6px 10px", cursor: "pointer", fontFamily: "inherit",
+                }}>
+                  Save calibration
+                </button>
+                {calib[selKey] && (
+                  <button onClick={reset} style={{
+                    fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.faint,
+                    background: "transparent", border: `1px dashed ${T.line}`, borderRadius: 3,
+                    padding: "6px 10px", cursor: "pointer", fontFamily: "inherit",
+                  }}>
+                    Remove — back to catalogue
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PaintboxView({ box, setBox, boxOnly, setBoxOnly, calib, setCalib }) {
   const toggle = (key) =>
     setBox((prev) => {
       const n = new Set(prev);
@@ -66,6 +184,8 @@ function PaintboxView({ box, setBox, boxOnly, setBoxOnly }) {
         </div>
       )}
 
+      <TubeCalibration box={box} calib={calib} setCalib={setCalib} />
+
       {MAKERS.map((maker) => {
         const paints = PAINTS.filter((p) => p.m === maker);
         const owned = paints.filter((p) => box.has(p.m + "::" + p.n)).length;
@@ -105,7 +225,8 @@ function PaintboxView({ box, setBox, boxOnly, setBoxOnly }) {
                     border: `1px solid ${on ? T.ochre : T.line}`,
                   }}>
                     <span style={{
-                      width: 22, height: 22, borderRadius: 3, background: p.x,
+                      width: 22, height: 22, borderRadius: 3,
+                      background: calib[key] ? calib[key].masstone : p.x,
                       border: `1px solid ${T.line}`, flexShrink: 0,
                     }} />
                     <span style={{ flex: 1, minWidth: 0 }}>
@@ -113,7 +234,8 @@ function PaintboxView({ box, setBox, boxOnly, setBoxOnly }) {
                         {p.n}
                       </span>
                       <span className="mono" style={{ display: "block", color: T.faint, fontSize: 9 }}>
-                        {p.p} · Series {p.s}
+                        {p.p} · Series {p.s}{calib[key] ? " · " : ""}
+                        {calib[key] && <span style={{ color: T.ochre }}>calibrated</span>}
                       </span>
                     </span>
                     <span style={{ color: on ? T.ochre : T.line, fontSize: 13, flexShrink: 0 }}>

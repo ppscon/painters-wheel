@@ -1,9 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { T, SectionRule, Tip } from "./ui.jsx";
-import { computeRecord } from "../color/paints.js";
+import { computeRecord, paintPool } from "../color/paints.js";
+import { buildLadder, bestRung, bestCorrection } from "../color/mixlab.js";
+import { hexToRgb, rgbToLab, deltaE2000 } from "../color/math.js";
 /* ---------------- Colour record --------------------------------- */
-function useColorRecord(hex, activeBox) {
-  return useMemo(() => (hex ? computeRecord(hex, activeBox) : null), [hex, activeBox]);
+function useColorRecord(hex, activeBox, calib) {
+  return useMemo(() => (hex ? computeRecord(hex, activeBox, calib) : null), [hex, activeBox, calib]);
 }
 function dELabel(dE) {
   if (dE < 3) return { t: "excellent match", c: "#4DB6AC" };
@@ -11,8 +13,171 @@ function dELabel(dE) {
   if (dE < 12) return { t: "base for a mixture", c: "#C9962E" };
   return { t: "mixing required", c: T.vermilionSoft };
 }
-function ColorRecord({ hex, sourceLabel, onSave, activeBox, onOpenMunsell }) {
-  const rec = useColorRecord(hex, activeBox);
+const TINT_ROUTE = {
+  mid: "Closest at its mid tint — begin near equal paint and white.",
+  pale: "Closest at its pale tint — a little paint in plenty of white.",
+};
+
+/* The graded ladder: one recommended mix as physical piles at fixed
+   ratios, each rung with its predicted colour, Munsell notation and
+   distance to target. */
+function MixLadder({ source, adjuster, targetLab }) {
+  const ladder = useMemo(
+    () => buildLadder(source.x, adjuster.x, targetLab),
+    [source.x, adjuster.x, targetLab]
+  );
+  const best = bestRung(ladder);
+  return (
+    <div>
+      <div style={{ fontSize: 12, color: T.bone, margin: "10px 0 8px", lineHeight: 1.5 }}>
+        {source.n}
+        {source.m && <span style={{ color: T.faint }}> ({source.m})</span>}
+        <span style={{ color: T.muted }}> stepped toward </span>
+        {adjuster.n}
+        {adjuster.m && <span style={{ color: T.faint }}> ({adjuster.m})</span>}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {ladder.map((step) => (
+          <div key={step.ratio} style={{
+            width: 66, borderRadius: 4, overflow: "hidden",
+            border: `1px solid ${step === best ? T.ochre : T.line}`,
+          }}>
+            <div style={{ height: 34, background: step.hex, position: "relative" }}>
+              {step === best && (
+                <span style={{
+                  position: "absolute", top: 2, right: 3, fontSize: 8, letterSpacing: 1,
+                  color: rgbToLab(...hexToRgb(step.hex))[0] > 55 ? T.ground : T.bone,
+                }}>
+                  BEST
+                </span>
+              )}
+            </div>
+            <div style={{ padding: "4px 5px 5px", background: T.panel }}>
+              <div className="mono" style={{ fontSize: 11, color: T.bone }}>{step.ratio}</div>
+              <div style={{ fontSize: 9, color: T.muted }}>{step.label}</div>
+              <div className="mono" style={{ fontSize: 8, color: T.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {step.munsell}
+              </div>
+              <div className="mono" style={{ fontSize: 9, color: step === best ? T.ochre : T.muted }}>
+                ΔE {step.dE.toFixed(1)}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ color: T.faint, fontSize: 11, lineHeight: 1.5, marginTop: 8, fontStyle: "italic" }}>
+        Lay these out as separate piles on the palette; the marked rung is the closest predicted
+        landing. Ratios are {source.n} : {adjuster.n} by volume.
+      </div>
+    </div>
+  );
+}
+
+/* The observe-correct loop. Recording what actually came off the
+   palette makes that observation the new mixing source; the best
+   single addition from the working pool is searched out and the
+   ladder re-graded from reality instead of prediction. Keyed on the
+   target hex by the caller, so state resets when the target moves. */
+function MixLab({ rec, activeBox, calib, mixLog, onRecordMix, onClearMixLog }) {
+  const [sample, setSample] = useState(rec.hex);
+  const [obsHex, setObsHex] = useState(null);
+  const pool = useMemo(() => paintPool(activeBox, calib), [activeBox, calib]);
+  const correction = useMemo(
+    () => (obsHex ? bestCorrection(obsHex, rec.lab, pool) : null),
+    [obsHex, rec.lab, pool]
+  );
+  const source = obsHex
+    ? { x: obsHex, n: "Your palette sample", m: null }
+    : rec.mix ? rec.mix.a : rec.matches[0];
+  const adjuster = obsHex ? (correction && correction.paint) : rec.mix ? rec.mix.b : null;
+  const record = () => {
+    const mixed = sample.toUpperCase();
+    onRecordMix({
+      id: Date.now(),
+      target: rec.hex.toUpperCase(),
+      mixed,
+      dE: deltaE2000(rec.lab, rgbToLab(...hexToRgb(mixed))),
+      at: new Date().toISOString(),
+    });
+    setObsHex(mixed);
+  };
+  return (
+    <div>
+      {adjuster && (
+        <div>
+          <SectionRule>Mixing ladder<Tip text={"Seven piles from straight source to 1:4, each with its Kubelka-Munk predicted colour, Munsell notation and ΔE to the target. Mix the marked rung first, then walk a rung either way on the palette."} /></SectionRule>
+          <MixLadder source={source} adjuster={adjuster} targetLab={rec.lab} />
+        </div>
+      )}
+      <SectionRule>I mixed this<Tip text={"After mixing, match this swatch to the pile on your palette (or sample a photo of it). The observation becomes the new starting point and the app searches your paints for the best single addition to close the remaining gap."} /></SectionRule>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 0 4px" }}>
+        <input type="color" value={sample} aria-label="Colour you actually mixed"
+          onChange={(e) => setSample(e.target.value)}
+          style={{ width: 44, height: 34, padding: 0, border: `1px solid ${T.line}`, borderRadius: 4, background: T.ground, cursor: "pointer" }} />
+        <span className="mono" style={{ fontSize: 12, color: T.muted }}>{sample.toUpperCase()}</span>
+        <button onClick={record} style={{
+          marginLeft: "auto", fontSize: 10, letterSpacing: 1, textTransform: "uppercase",
+          color: T.ochre, background: "transparent", border: `1px solid ${T.ochre}`,
+          borderRadius: 3, padding: "6px 10px", cursor: "pointer", fontFamily: "inherit",
+        }}>
+          Record mix
+        </button>
+      </div>
+      {obsHex && (
+        <div style={{
+          marginTop: 6, fontSize: 12, color: T.bone, background: T.panel,
+          border: `1px solid ${T.line}`, borderLeft: `3px solid ${T.ochre}`,
+          padding: "8px 10px", borderRadius: 3, lineHeight: 1.55,
+        }}>
+          {correction ? (
+            <span>
+              Correcting from your sample: add {correction.paint.n}
+              <span style={{ color: T.faint }}> ({correction.paint.m})</span> at {correction.ratio} —
+              predicted ΔE {correction.dE.toFixed(1)}. The ladder above now walks that addition.
+            </span>
+          ) : (
+            <span>Recorded. No corrective tube found in the current pool.</span>
+          )}
+          <button onClick={() => setObsHex(null)} style={{
+            display: "block", marginTop: 6, fontSize: 10, letterSpacing: 1, textTransform: "uppercase",
+            color: T.faint, background: "transparent", border: `1px dashed ${T.line}`,
+            borderRadius: 3, padding: "4px 8px", cursor: "pointer", fontFamily: "inherit",
+          }}>
+            Back to the recommendation
+          </button>
+        </div>
+      )}
+      {mixLog.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: T.faint }}>
+              Recent observations
+            </span>
+            <button onClick={onClearMixLog} style={{
+              fontSize: 9, letterSpacing: 1, textTransform: "uppercase", color: T.faint,
+              background: "transparent", border: `1px dashed ${T.line}`, borderRadius: 3,
+              padding: "3px 7px", cursor: "pointer", fontFamily: "inherit",
+            }}>
+              Clear
+            </button>
+          </div>
+          {mixLog.slice(0, 5).map((o) => (
+            <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: `1px solid ${T.line}` }}>
+              <span title={`Target ${o.target}`} style={{ width: 18, height: 18, borderRadius: 3, background: o.target, border: `1px solid ${T.line}`, flexShrink: 0 }} />
+              <span style={{ color: T.faint, fontSize: 11 }}>→</span>
+              <span title={`Mixed ${o.mixed}`} style={{ width: 18, height: 18, borderRadius: 3, background: o.mixed, border: `1px solid ${T.line}`, flexShrink: 0 }} />
+              <span className="mono" style={{ fontSize: 10, color: T.muted, flex: 1 }}>{o.mixed}</span>
+              <span className="mono" style={{ fontSize: 10, color: o.dE < 3 ? "#4DB6AC" : T.muted }}>ΔE {o.dE.toFixed(1)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ColorRecord({ hex, sourceLabel, onSave, activeBox, calib, mixLog, onRecordMix, onClearMixLog, onOpenMunsell }) {
+  const rec = useColorRecord(hex, activeBox, calib);
   if (!rec)
     return (
       <div style={{ color: T.faint, fontStyle: "italic", padding: "24px 0", lineHeight: 1.6 }}>
@@ -50,7 +215,7 @@ function ColorRecord({ hex, sourceLabel, onSave, activeBox, onOpenMunsell }) {
                 color: T.ochre, fontSize: 10, letterSpacing: 1, textTransform: "uppercase",
                 cursor: "pointer", padding: 0, fontFamily: "inherit", textDecoration: "underline",
               }}>
-                View hue page {"\u2192"}
+                View hue page {"→"}
               </button>
             )}
           </div>
@@ -89,7 +254,7 @@ function ColorRecord({ hex, sourceLabel, onSave, activeBox, onOpenMunsell }) {
         )}
       </div>
 
-      <SectionRule>Nearest oil paints<Tip text={"ΔE is CIEDE2000 perceptual difference: under 2 barely distinguishable, under 6 close, over 12 needs mixing. O/SO/ST/T = opaque to transparent; Series is the maker's price band."} /></SectionRule>
+      <SectionRule>Nearest oil paints<Tip text={"ΔE is CIEDE2000 perceptual difference: under 2 barely distinguishable, under 6 close, over 12 needs mixing. O/SO/ST/T = opaque to transparent; Series is the maker's price band. Calibrated tubes match against your measured masstone and tints."} /></SectionRule>
       {activeBox && (
         <div style={{ fontSize: 10, color: T.ochre, marginTop: 6, letterSpacing: 0.5 }}>
           Matching your paintbox · {activeBox.size} tubes
@@ -98,24 +263,39 @@ function ColorRecord({ hex, sourceLabel, onSave, activeBox, onOpenMunsell }) {
       {rec.matches.map((m, i) => {
         const q = dELabel(m.dE);
         return (
-          <div key={i} style={{
-            display: "flex", gap: 12, alignItems: "center",
-            padding: "10px 0", borderBottom: `1px solid ${T.line}`,
-          }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 4, background: m.x,
-              border: `1px solid ${T.line}`, flexShrink: 0,
-            }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ color: T.bone, fontSize: 14, fontWeight: 600 }}>{m.n}</div>
-              <div style={{ color: T.muted, fontSize: 12 }}>
-                {m.m} · <span className="mono">{m.p}</span> · {m.o} · Series {m.s}
+          <div key={i} style={{ padding: "10px 0", borderBottom: `1px solid ${T.line}` }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 4, background: m.matchX || m.x,
+                border: `1px solid ${T.line}`, flexShrink: 0,
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: T.bone, fontSize: 14, fontWeight: 600 }}>
+                  {m.n}
+                  {m.calibrated && (
+                    <span style={{
+                      marginLeft: 6, fontSize: 8, letterSpacing: 1, textTransform: "uppercase",
+                      color: T.ochre, border: `1px solid ${T.ochre}`, borderRadius: 2,
+                      padding: "1px 4px", verticalAlign: "2px",
+                    }}>
+                      Personal
+                    </span>
+                  )}
+                </div>
+                <div style={{ color: T.muted, fontSize: 12 }}>
+                  {m.m} · <span className="mono">{m.p}</span> · {m.o} · Series {m.s}
+                </div>
+              </div>
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div className="mono" style={{ color: T.bone, fontSize: 13 }}>ΔE {m.dE.toFixed(1)}</div>
+                <div style={{ color: q.c, fontSize: 10, letterSpacing: 0.5 }}>{q.t}</div>
               </div>
             </div>
-            <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <div className="mono" style={{ color: T.bone, fontSize: 13 }}>ΔE {m.dE.toFixed(1)}</div>
-              <div style={{ color: q.c, fontSize: 10, letterSpacing: 0.5 }}>{q.t}</div>
-            </div>
+            {TINT_ROUTE[m.matchType] && (
+              <div style={{ color: T.ochre, fontSize: 11, marginTop: 4, paddingLeft: 52 }}>
+                {TINT_ROUTE[m.matchType]}
+              </div>
+            )}
           </div>
         );
       })}
@@ -146,6 +326,11 @@ function ColorRecord({ hex, sourceLabel, onSave, activeBox, onOpenMunsell }) {
             than light. Real pigments still vary by brand, so confirm on the palette.
           </div>
         </div>
+      )}
+
+      {onRecordMix && (
+        <MixLab key={rec.hex} rec={rec} activeBox={activeBox} calib={calib}
+          mixLog={mixLog || []} onRecordMix={onRecordMix} onClearMixLog={onClearMixLog} />
       )}
 
       <button onClick={() => onSave(rec.hex)} style={{

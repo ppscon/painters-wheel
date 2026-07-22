@@ -3,7 +3,7 @@ import { T, SectionRule } from "./ui.jsx";
 import { mixMulti } from "../color/km.js";
 import { nearestPaint } from "../color/paints.js";
 import { ZORN, ZHEX, zmix, ZORN_MIXES, ZORN_ZONES, ZORN_STEPS } from "../data/zorn.js";
-function ZornView({ setSampled, activeBox }) {
+function ZornView({ setSampled, activeBox, calib }) {
   const [tint, setTint] = useState(0);
   const grey = mixMulti([[ZHEX.black, 1], [ZHEX.white, 2.2]]);
   const warmGround = mixMulti([[ZHEX.red, 3], [ZHEX.ochre, 2], [ZHEX.black, 0.6]]);
@@ -76,7 +76,7 @@ function ZornView({ setSampled, activeBox }) {
       </div>
       {ZORN_MIXES.map((m) => {
         const hex = zmix(m.spec, tint);
-        const near = nearestPaint(hex, activeBox);
+        const near = nearestPaint(hex, activeBox, calib);
         return (
           <div key={m.name} style={{
             display: "flex", gap: 12, alignItems: "center", padding: "10px 0",

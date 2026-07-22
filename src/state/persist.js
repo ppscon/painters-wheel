@@ -11,6 +11,7 @@ const PW_STORE = (() => {
 
 const LESSON_KEYS = ["contrast", "value", "hue", "chroma", "upload"];
 const HEX_RE = /^#[0-9A-F]{6}$/i;
+const MIX_LOG_MAX = 12;
 
 let PIN_SEQ = 1;
 function nextPinId() { return PIN_SEQ++; }
@@ -35,6 +36,8 @@ function sanitiseSaved(saved) {
     box: new Set(),
     boxOnly: false,
     shop: { targets: [], ticked: [], name: null },
+    calib: {},
+    mixLog: [],
   };
   try {
     if (saved && typeof saved === "object") {
@@ -64,6 +67,32 @@ function sanitiseSaved(saved) {
         }
         if (typeof saved.shop.name === "string") out.shop.name = saved.shop.name;
       }
+      if (saved.calib && typeof saved.calib === "object" && !Array.isArray(saved.calib)) {
+        for (const k of Object.keys(saved.calib)) {
+          const c = saved.calib[k];
+          if (!k.includes("::") || !c || typeof c !== "object") continue;
+          const { masstone, midTint, paleTint, updatedAt } = c;
+          if (![masstone, midTint, paleTint].every((h) => typeof h === "string" && HEX_RE.test(h))) continue;
+          out.calib[k] = {
+            masstone: masstone.toUpperCase(),
+            midTint: midTint.toUpperCase(),
+            paleTint: paleTint.toUpperCase(),
+            ...(typeof updatedAt === "string" ? { updatedAt } : {}),
+          };
+        }
+      }
+      if (Array.isArray(saved.mixLog)) {
+        out.mixLog = saved.mixLog
+          .filter((o) =>
+            o && typeof o === "object" &&
+            [o.id, o.dE].every((n) => typeof n === "number" && Number.isFinite(n)) &&
+            [o.target, o.mixed].every((h) => typeof h === "string" && HEX_RE.test(h)))
+          .slice(0, MIX_LOG_MAX)
+          .map((o) => ({
+            id: o.id, target: o.target.toUpperCase(), mixed: o.mixed.toUpperCase(), dE: o.dE,
+            ...(typeof o.at === "string" ? { at: o.at } : {}),
+          }));
+      }
     }
     for (const k of LESSON_KEYS) {
       for (const p of out.pins[k]) if (p.id >= PIN_SEQ) PIN_SEQ = p.id + 1;
@@ -86,4 +115,4 @@ function loadSaved(store = PW_STORE) {
   }
 }
 
-export { PW_STORE, PW_KEY, loadSaved, sanitiseSaved, nextPinId };
+export { PW_STORE, PW_KEY, MIX_LOG_MAX, loadSaved, sanitiseSaved, nextPinId };

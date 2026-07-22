@@ -90,3 +90,34 @@ describe("loadSaved shopping list", () => {
     expect(out.shop).toEqual({ targets: [], ticked: [], name: null });
   });
 });
+
+describe("loadSaved calibration and mix log", () => {
+  const CAL = { masstone: "#6e3520", midTint: "#B08468", paleTint: "#D8C0B0", updatedAt: "2026-07-22T10:00:00Z" };
+  it("round-trips calibrations, uppercasing hexes", () => {
+    const out = loadSaved(fakeStore(JSON.stringify({ calib: { "Winsor & Newton::Burnt Sienna": CAL } })));
+    expect(out.calib["Winsor & Newton::Burnt Sienna"]).toEqual({ ...CAL, masstone: "#6E3520" });
+  });
+  it("drops calibrations with missing or invalid swatches and bad keys", () => {
+    const out = loadSaved(fakeStore(JSON.stringify({ calib: {
+      "no-separator": CAL,
+      "A::B": { masstone: "#123456" },
+      "C::D": { ...CAL, paleTint: "beige" },
+      "E::F": null,
+    } })));
+    expect(out.calib).toEqual({});
+  });
+  it("round-trips the mix log, capped at 12", () => {
+    const obs = (i) => ({ id: i, target: "#aabbcc", mixed: "#ddeeff", dE: 3.2, at: "2026-07-22T10:00:00Z" });
+    const out = loadSaved(fakeStore(JSON.stringify({ mixLog: Array.from({ length: 20 }, (_, i) => obs(i)) })));
+    expect(out.mixLog).toHaveLength(12);
+    expect(out.mixLog[0]).toEqual({ id: 0, target: "#AABBCC", mixed: "#DDEEFF", dE: 3.2, at: "2026-07-22T10:00:00Z" });
+  });
+  it("drops malformed observations and defaults both when absent", () => {
+    const bad = loadSaved(fakeStore(JSON.stringify({ mixLog: [null, { id: "x", target: "#AABBCC", mixed: "#DDEEFF", dE: 1 }, { id: 1, target: "red", mixed: "#DDEEFF", dE: 1 }], calib: [] })));
+    expect(bad.mixLog).toEqual([]);
+    expect(bad.calib).toEqual({});
+    const absent = loadSaved(fakeStore(JSON.stringify({ palette: [] })));
+    expect(absent.mixLog).toEqual([]);
+    expect(absent.calib).toEqual({});
+  });
+});

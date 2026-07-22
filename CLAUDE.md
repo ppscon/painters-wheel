@@ -13,7 +13,8 @@ Interactive colour theory for oil painters. Live at https://painters-wheel.verce
 
 ## Architecture notes
 
-- `src/state/persist.js` — ALL localStorage reads go through `loadSaved()`/`sanitiseSaved()`; nothing may throw at module scope (ErrorBoundary can't catch module-init errors)
+- `src/state/persist.js` — ALL localStorage reads go through `loadSaved()`/`sanitiseSaved()`; nothing may throw at module scope (ErrorBoundary can't catch module-init errors). The persisted blob has THREE write sites that must stay in step: the localStorage effect, the sync push (effect + `startSync`), and `sanitiseSaved` — persisted keys are `pins/palette/box/boxOnly/shop/calib/mixLog`
+- `src/color/mixlab.js` — 4.0 Mix Lab pure functions: graded mixing `LADDER` (1:0→1:4), `buildLadder`, `bestCorrection` (observe-correct search), `calibrationDefaults`. Tube calibration overrides live in `paints.js` `applyCalibration` (map keyed `Maker::Name`, calibrated masstone replaces `x`, catalogue kept as `catalogX`, tint swatches make matching tint-aware via `swatchMatch`)
 - `src/state/sync.js` — cross-device sync via private codes against the Crate Escape Supabase project (`pw_sync` table, RLS deny-all, access only via `pw_sync_get`/`pw_sync_put` SECURITY DEFINER RPCs; migration `painters_wheel_sync`)
 - Munsell renotation data is fetched at runtime from `/munsell.json`, NOT bundled; regenerate with `node scripts/build-munsell-json.mjs` (source of truth: `src/munsellData.js`, imported only by tests/scripts)
 - All non-landing tabs are React.lazy; Lessons is the landing chunk
