@@ -8,7 +8,7 @@ const HELP_SECTIONS = [
   ["Paintbox", "Tick the tubes you own and switch matching restriction on; every paint match, mixing recommendation and nearest-tube readout then searches only your box. Needs at least two tubes to activate."],
   ["Shopping List", "Builds the tube list needed to paint the image analysed in Your Canvas: every dominant cluster and pin resolves to its best single tube or the two components of its best mix, de-duplicated, with tubes you already own listed separately. Tick tubes off as you buy them, or copy the list for the shop; the list and ticks persist in this browser until you analyse a new image."],
   ["The colour record", "Every pinned or picked colour gets its hex, RGB, Lab and Munsell notation, temperature and value-zone guidance, the three nearest tube paints with difference scores, and, when no single tube is close enough, a two-paint mixing recommendation with ratios."],
-  ["Your data", "Pins, the saved palette and your paintbox persist in this browser only; nothing is sent to a server. Clearing site data resets them."],
+  ["Your data", "Pins, the saved palette, your paintbox and the shopping list persist in this browser. Nothing is sent anywhere unless you turn on Sync across devices (in the right-hand column), which stores that data — never your images — under a private code you keep. Clearing site data resets the browser copy."],
 ];
 const HELP_GLOSSARY = [
   ["Hue", "Which colour family a colour belongs to: red, yellow-green, blue and so on."],

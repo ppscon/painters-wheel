@@ -25,11 +25,10 @@ function sanitisePin(p) {
   return pin;
 }
 
-/* All reading, parsing and shape-validation of saved state lives here,
-   behind one try/catch, so nothing can throw at module scope and a
-   corrupt painters-wheel-v1 key can never white-screen the app. On a
-   parse failure the key is removed so the next load starts clean. */
-function loadSaved(store = PW_STORE) {
+/* Shape-validates a saved-state blob (from localStorage OR a remote
+   sync payload) into safe, fully-typed state. Never throws. Also
+   advances the pin id sequence past any restored pins. */
+function sanitiseSaved(saved) {
   const out = {
     pins: { contrast: [], value: [], hue: [], chroma: [], upload: [] },
     palette: [],
@@ -37,9 +36,7 @@ function loadSaved(store = PW_STORE) {
     boxOnly: false,
     shop: { targets: [], ticked: [], name: null },
   };
-  if (!store) return out;
   try {
-    const saved = JSON.parse(store.getItem(PW_KEY) || "null");
     if (saved && typeof saved === "object") {
       if (saved.pins && typeof saved.pins === "object") {
         for (const k of LESSON_KEYS) {
@@ -71,10 +68,22 @@ function loadSaved(store = PW_STORE) {
     for (const k of LESSON_KEYS) {
       for (const p of out.pins[k]) if (p.id >= PIN_SEQ) PIN_SEQ = p.id + 1;
     }
-  } catch (e) {
-    try { store.removeItem(PW_KEY); } catch (e2) { /* best effort */ }
-  }
+  } catch (e) { /* malformed field; whatever validated so far stands */ }
   return out;
 }
 
-export { PW_STORE, PW_KEY, loadSaved, nextPinId };
+/* Reads and validates localStorage behind one try/catch, so nothing
+   can throw at module scope and a corrupt painters-wheel-v1 key can
+   never white-screen the app. On a parse failure the key is removed
+   so the next load starts clean. */
+function loadSaved(store = PW_STORE) {
+  if (!store) return sanitiseSaved(null);
+  try {
+    return sanitiseSaved(JSON.parse(store.getItem(PW_KEY) || "null"));
+  } catch (e) {
+    try { store.removeItem(PW_KEY); } catch (e2) { /* best effort */ }
+    return sanitiseSaved(null);
+  }
+}
+
+export { PW_STORE, PW_KEY, loadSaved, sanitiseSaved, nextPinId };

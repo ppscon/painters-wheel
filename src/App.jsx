@@ -6,7 +6,7 @@
    ================================================================ */
 
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
-import { T } from "./components/ui.jsx";
+import { T, Tip } from "./components/ui.jsx";
 import { hexToRgb, rgbToLab } from "./color/math.js";
 import { labToMunsell, munsellPageIndex, loadMunsell } from "./color/munsell.js";
 import { nearestPaint } from "./color/paints.js";
@@ -30,8 +30,9 @@ function TabLoading() {
     </div>
   );
 }
-import { PW_STORE, PW_KEY, loadSaved, nextPinId } from "./state/persist.js";
+import { PW_STORE, PW_KEY, loadSaved, sanitiseSaved, nextPinId } from "./state/persist.js";
 import { encodeStudy, decodeStudy } from "./state/share.js";
+import { makeSyncCode, normaliseSyncCode, getStoredSyncCode, storeSyncCode, syncPut, syncGet } from "./state/sync.js";
 
 /* Compact fixed readout for small screens, where the full colour record
    sits below the painting: swatch, notation and nearest tube at a
@@ -63,6 +64,93 @@ function MobileReadout({ hex, activeBox, recordRef }) {
         }}>
         Record
       </button>
+    </div>
+  );
+}
+
+/* Cross-device sync panel: create or enter a sync code, see status,
+   disconnect. Lives in the aside so it is reachable from every tab. */
+function SyncPanel({ code, state, onCreate, onConnect, onDisconnect }) {
+  const [entering, setEntering] = useState(false);
+  const [input, setInput] = useState("");
+  const [bad, setBad] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const statusLine =
+    state.status === "syncing" ? "Syncing…" :
+    state.status === "error" ? "Sync error — retries on your next change" :
+    state.status === "synced" && state.at ? `Synced ${new Date(state.at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` :
+    state.status === "synced" ? "Connected" : "";
+  const small = {
+    fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: T.faint,
+    background: "transparent", border: `1px dashed ${T.line}`, borderRadius: 3,
+    padding: "6px 9px", cursor: "pointer", fontFamily: "inherit",
+  };
+  return (
+    <div style={{ background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, padding: 18, marginTop: 16 }}>
+      <div style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", color: T.ochre, marginBottom: 8 }}>
+        Sync across devices
+        <Tip text="Pins, saved palette, paintbox and shopping list sync through a private code — no account, no email. Anyone with the code can read and change this data, so treat it like a key. Images never leave the device. Last write wins if two devices change things at once." side="bottom" />
+      </div>
+      {!code ? (
+        <div>
+          <p style={{ color: T.faint, fontSize: 12, lineHeight: 1.6, margin: "0 0 10px" }}>
+            Carry your pins, palette, paintbox and shopping list to your tablet or phone.
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button onClick={onCreate} style={{ ...small, color: T.ochre, border: `1px solid ${T.ochre}` }}>
+              Create sync code
+            </button>
+            <button onClick={() => setEntering(!entering)} style={small}>
+              I have a code
+            </button>
+          </div>
+          {entering && (
+            <div style={{ marginTop: 10 }}>
+              <input
+                autoFocus value={input} placeholder="ABCDE-FGHIJ-KLMNO-PQRST"
+                aria-label="Enter your sync code"
+                onChange={(e) => { setInput(e.target.value); setBad(false); }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !onConnect(input)) setBad(true); }}
+                className="mono"
+                style={{
+                  width: "100%", boxSizing: "border-box", fontSize: 12, background: T.ground,
+                  color: T.bone, border: `1px solid ${bad ? T.vermilionSoft : T.line}`,
+                  borderRadius: 3, padding: "8px 10px", fontFamily: "inherit",
+                }} />
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
+                <button onClick={() => { if (!onConnect(input)) setBad(true); }} style={{ ...small, color: T.ochre, border: `1px solid ${T.ochre}` }}>
+                  Connect
+                </button>
+                {bad && <span style={{ fontSize: 11, color: T.vermilionSoft }}>That doesn't look like a sync code.</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div>
+          <div className="mono" style={{ fontSize: 12, color: T.bone, wordBreak: "break-all" }}>{code}</div>
+          <div style={{ fontSize: 11, color: T.muted, margin: "6px 0 10px" }}>{statusLine}</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() => {
+                const done = () => { setCopied(true); setTimeout(() => setCopied(false), 2200); };
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  navigator.clipboard.writeText(code).then(done).catch(() => window.prompt("Copy your sync code:", code));
+                } else {
+                  window.prompt("Copy your sync code:", code);
+                }
+              }}
+              style={{ ...small, color: T.ochre, border: `1px solid ${T.ochre}` }}>
+              {copied ? "Copied!" : "Copy code"}
+            </button>
+            <button onClick={onDisconnect} style={small}>Disconnect</button>
+          </div>
+          <p style={{ color: T.faint, fontSize: 11, lineHeight: 1.6, marginTop: 10 }}>
+            Enter this code on another device to pull everything across. Keep it private — it is
+            the only key to your synced data.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -144,6 +232,65 @@ export default function App() {
       PW_STORE.setItem(PW_KEY, JSON.stringify({ pins: { ...pins, upload: [] }, palette, box: [...box], boxOnly, shop }));
     } catch (e) { /* storage full or unavailable; persistence is best-effort */ }
   }, [pins, palette, box, boxOnly, shop]);
+
+  /* -------- cross-device sync (see state/sync.js for the model) ---- */
+  const [syncCode, setSyncCode] = useState(() => getStoredSyncCode());
+  const [syncState, setSyncState] = useState({ status: syncCode ? "idle" : "off", at: null });
+  const applyRemote = useCallback((data) => {
+    const clean = sanitiseSaved(data);
+    setPins(clean.pins);
+    setPalette(clean.palette);
+    setBox(clean.box);
+    setBoxOnly(clean.boxOnly);
+    setShop(clean.shop);
+    setActivePin(null);
+  }, []);
+  useEffect(() => {
+    if (!syncCode) return;
+    let on = true;
+    setSyncState((s) => ({ ...s, status: "syncing" }));
+    syncGet(syncCode).then((res) => {
+      if (!on) return;
+      if (res && res.data) applyRemote(res.data);
+      setSyncState({ status: "synced", at: res ? res.updated_at : null });
+    }).catch(() => { if (on) setSyncState({ status: "error", at: null }); });
+    return () => { on = false; };
+  }, [syncCode, applyRemote]);
+  const pushTimer = useRef(0);
+  const firstSave = useRef(true);
+  useEffect(() => {
+    if (firstSave.current) { firstSave.current = false; return; }
+    if (!syncCode) return;
+    clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(() => {
+      setSyncState((s) => ({ ...s, status: "syncing" }));
+      syncPut(syncCode, { pins: { ...pins, upload: [] }, palette, box: [...box], boxOnly, shop })
+        .then((ts) => setSyncState({ status: "synced", at: ts }))
+        .catch(() => setSyncState({ status: "error", at: null }));
+    }, 1500);
+    return () => clearTimeout(pushTimer.current);
+  }, [pins, palette, box, boxOnly, shop, syncCode]);
+  const startSync = () => {
+    const code = makeSyncCode();
+    storeSyncCode(code);
+    setSyncState({ status: "syncing", at: null });
+    syncPut(code, { pins: { ...pins, upload: [] }, palette, box: [...box], boxOnly, shop })
+      .then((ts) => setSyncState({ status: "synced", at: ts }))
+      .catch(() => setSyncState({ status: "error", at: null }));
+    setSyncCode(code);
+  };
+  const connectSync = (input) => {
+    const code = normaliseSyncCode(input);
+    if (!code) return false;
+    storeSyncCode(code);
+    setSyncCode(code); // the pull effect fetches and applies
+    return true;
+  };
+  const disconnectSync = () => {
+    storeSyncCode(null);
+    setSyncCode(null);
+    setSyncState({ status: "off", at: null });
+  };
 
   const ctxKey = tab === "lessons" ? lessonId : tab === "upload" ? "upload" : null;
   const ctxPins = ctxKey ? pins[ctxKey] : [];
@@ -570,6 +717,9 @@ export default function App() {
               </div>
             )}
           </div>
+
+          <SyncPanel code={syncCode} state={syncState}
+            onCreate={startSync} onConnect={connectSync} onDisconnect={disconnectSync} />
 
           <p style={{ color: T.faint, fontSize: 11, lineHeight: 1.6, marginTop: 14 }}>
             Paint swatches are approximate masstone values compiled for guidance; verify against
