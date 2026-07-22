@@ -300,6 +300,14 @@ export default function App() {
         @media (max-width: 900px) { .pw-main { grid-template-columns: 1fr !important; padding-bottom: 86px !important; } }
         .pw-mobile-readout { display: none; }
         @media (max-width: 900px) { .pw-mobile-readout { display: flex; } }
+        /* Landscape phones: the full masthead would eat most of the
+           viewport before the painting appears. */
+        @media (max-height: 480px) {
+          header { padding: 10px 24px 6px !important; }
+          .pw-eyebrow, .pw-subtitle { display: none; }
+          .pw-title { font-size: 22px !important; margin: 0 !important; }
+          nav button { padding: 8px 16px !important; }
+        }
         @media print {
           body { background: #FBF7EE !important; }
           header, .pw-main, .pw-help-overlay { display: none !important; }
@@ -315,13 +323,13 @@ export default function App() {
       `}</style>
 
       <header style={{ padding: "34px 24px 18px", borderBottom: `1px solid ${T.line}`, textAlign: "center", position: "relative" }}>
-        <div style={{ fontSize: 11, letterSpacing: 5, textTransform: "uppercase", color: T.ochre }}>
+        <div className="pw-eyebrow" style={{ fontSize: 11, letterSpacing: 5, textTransform: "uppercase", color: T.ochre }}>
           Colour theory for oil painters
         </div>
-        <h1 className="display" style={{ fontSize: "clamp(34px, 5vw, 52px)", fontWeight: 500, margin: "6px 0 4px", color: T.bone }}>
+        <h1 className="display pw-title" style={{ fontSize: "clamp(34px, 5vw, 52px)", fontWeight: 500, margin: "6px 0 4px", color: T.bone }}>
           The Painter's Wheel
         </h1>
-        <div className="display" style={{ fontStyle: "italic", fontSize: 17, color: T.muted }}>
+        <div className="display pw-subtitle" style={{ fontStyle: "italic", fontSize: 17, color: T.muted }}>
           Four paintings, four lessons: contrast, value, hue and chroma, and the paints that carry them
         </div>
         <button onClick={() => setHelpOpen(true)} title="Help" aria-label="Open help" style={{

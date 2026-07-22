@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useId } from "react";
 const T = {
   ground: "#1B1512",
   panel: "#252017",
@@ -67,6 +67,7 @@ function SectionRule({ children }) {
 
 function Tip({ text, side = "top" }) {
   const [open, setOpen] = useState(false);
+  const tipId = useId();
   return (
     <span
       style={{ position: "relative", display: "inline-block", verticalAlign: "middle" }}
@@ -76,6 +77,7 @@ function Tip({ text, side = "top" }) {
       <button
         aria-label={typeof text === "string" ? `More information: ${text.slice(0, 60)}` : "More information"}
         aria-expanded={open}
+        aria-describedby={open ? tipId : undefined}
         onClick={() => setOpen((o) => !o)}
         onBlur={() => setOpen(false)}
         style={{
@@ -96,6 +98,7 @@ function Tip({ text, side = "top" }) {
       {open && (
         <span
           role="tooltip"
+          id={tipId}
           style={{
             position: "absolute",
             [side === "top" ? "bottom" : "top"]: "150%",
